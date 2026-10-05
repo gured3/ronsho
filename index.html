@@ -110,10 +110,9 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .relbox img:last-child{margin-bottom:0}
 .reltxt{padding:2px 8px;font-weight:700}
 .penmode .fld{-webkit-user-select:none;user-select:none}
-.mk-y{background:linear-gradient(transparent 50%,var(--my) 50%)}
-.mk-p{background:linear-gradient(transparent 50%,var(--mp) 50%)}
-.mk-b{background:linear-gradient(transparent 50%,var(--mb) 50%)}
-.mk-g{background:linear-gradient(transparent 50%,var(--mg) 50%)}
+.mk-y{background:var(--my)}.mk-p{background:var(--mp)}.mk-b{background:var(--mb)}.mk-g{background:var(--mg)}
+.mk{border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.sw{display:inline-block;width:22px;height:13px;border-radius:4px;margin-right:4px;vertical-align:-1px;opacity:.6}
 .cz{border-bottom:3px solid var(--acc2)}
 .cz.hid{color:transparent;background:var(--cloze);border-radius:8px;border-bottom-color:transparent}
 .cz.hid .mk{background:none}
@@ -208,7 +207,7 @@ table.st thead th{border-top:0;color:var(--sub);font-size:13px}
 <noscript>JavaScriptを有効にしてください。</noscript>
 <script>
 (()=>{'use strict';
-const VERSION='1.4';
+const VERSION='1.5';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -247,7 +246,7 @@ const A={cards:[],byId:new Map(),imgCache:new Map(),set:{},hist:{},
   home:{decks:[],tags:[],mode:'all',order:'rand',limit:0,repeat:true},
   list:{q:'',deck:'',tag:'',mark:'',sort:'u',shown:200},
   view:'home',S:null,saved:null,undo:[],tool:'',E:null,lastDeck:'',lastBackup:0,ros:[],listIds:[],impMode:'merge'};
-const Ink={mode:false,tool:'pen',color:'k',width:'thin',undo:[],cur:null,fs:null,k:'#111',pend:new Set(),t:0};
+const Ink={tp:new Map(),tt:null,prev:'pen',hc:'y',mode:false,tool:'pen',color:'k',width:'thin',undo:[],cur:null,fs:null,k:'#111',pend:new Set(),t:0};
 
 function normCard(c){
   c=c||{};c.id=c.id||uid();c.deck=String(c.deck||'').trim()||'未分類';
@@ -511,6 +510,9 @@ function rangeToFields(r,root){
   }
   return out;
 }
+function hasCardSel(){const s=getSelection();if(!s||!s.rangeCount||s.isCollapsed)return false;const cb=$('#cardBox');return!!(cb&&cb.contains(s.getRangeAt(0).commonAncestorContainer))}
+let autoT=0;
+function autoApply(){clearTimeout(autoT);if(A.view!=='study'||A.tool!=='mark'||!A.mop||!$('#edit').hidden)return;if(hasCardSel())applyMark(A.mop)}
 function applyMark(op){
   const c=curCard();if(!c)return;let sc=selCache;const sel=getSelection();
   if(sel&&sel.rangeCount&&!sel.isCollapsed){const r=sel.getRangeAt(0),cb=$('#cardBox');if(cb&&cb.contains(r.commonAncestorContainer))sc=rangeToFields(r,cb)}
@@ -523,8 +525,8 @@ function updateToolUI(){
   if(!$('#tMark'))return;
   $('#tMark').classList.toggle('on',A.tool==='mark');$('#tPen').classList.toggle('on',A.tool==='pen');
   const p=$('#tpanel'),on=x=>x?' on':'';
-  if(A.tool==='mark'){p.hidden=false;p.innerHTML=`<button class="btn sm" data-act="mk" data-op="y"><span class="mk-y">黄</span></button><button class="btn sm" data-act="mk" data-op="p"><span class="mk-p">桃</span></button><button class="btn sm" data-act="mk" data-op="b"><span class="mk-b">青</span></button><button class="btn sm" data-act="mk" data-op="g"><span class="mk-g">緑</span></button><button class="btn sm" data-act="mk" data-op="clear">線を消す</button><span class="sep"></span><button class="btn sm" data-act="mk" data-op="hide">隠す</button><button class="btn sm" data-act="mk" data-op="unhide">隠しを解除</button><span class="hint">文字を選んでから押す</span>`}
-  else if(A.tool==='pen'){p.hidden=false;p.innerHTML=`<button class="btn sm${on(Ink.tool==='pen'&&Ink.color==='k')}" data-act="pc" data-c="k"><i class="dot" style="background:var(--ink)"></i>黒</button><button class="btn sm${on(Ink.tool==='pen'&&Ink.color==='r')}" data-act="pc" data-c="r"><i class="dot" style="background:#e5243b"></i>赤</button><button class="btn sm${on(Ink.tool==='pen'&&Ink.color==='b')}" data-act="pc" data-c="b"><i class="dot" style="background:#2166e0"></i>青</button><span class="sep"></span><button class="btn sm${on(Ink.width==='thin')}" data-act="pw" data-w="thin">細</button><button class="btn sm${on(Ink.width==='thick')}" data-act="pw" data-w="thick">太</button><span class="sep"></span><button class="btn sm${on(Ink.tool==='eraser')}" data-act="er">消しゴム</button><button class="btn sm" data-act="iu">戻す</button><button class="btn sm dan" data-act="ic">全消去</button>`}
+  if(A.tool==='mark'){p.hidden=false;const mo=o=>on(A.mop===o);p.innerHTML=`<button class="btn sm${mo('y')}" data-act="mk" data-op="y"><span class="mk mk-y">黄</span></button><button class="btn sm${mo('p')}" data-act="mk" data-op="p"><span class="mk mk-p">桃</span></button><button class="btn sm${mo('b')}" data-act="mk" data-op="b"><span class="mk mk-b">青</span></button><button class="btn sm${mo('g')}" data-act="mk" data-op="g"><span class="mk mk-g">緑</span></button><button class="btn sm${mo('clear')}" data-act="mk" data-op="clear">線を消す</button><span class="sep"></span><button class="btn sm${mo('hide')}" data-act="mk" data-op="hide">隠す</button><button class="btn sm${mo('unhide')}" data-act="mk" data-op="unhide">隠しを解除</button><span class="hint">${A.mop?'文字を長押し・なぞると、すぐ反映':'色を選んでから文字を長押し・なぞる'}</span>`}
+  else if(A.tool==='pen'){p.hidden=false;p.innerHTML=`<button class="btn sm${on(Ink.tool==='pen'&&Ink.color==='k')}" data-act="pc" data-c="k"><i class="dot" style="background:var(--ink)"></i>黒</button><button class="btn sm${on(Ink.tool==='pen'&&Ink.color==='r')}" data-act="pc" data-c="r"><i class="dot" style="background:#e5243b"></i>赤</button><button class="btn sm${on(Ink.tool==='pen'&&Ink.color==='b')}" data-act="pc" data-c="b"><i class="dot" style="background:#2166e0"></i>青</button><span class="sep"></span><span class="hint">マーカー</span>${['y','p','b','g'].map(k=>`<button class="btn sm${on(Ink.tool==='hl'&&Ink.hc===k)}" data-act="hlc" data-c="${k}"><i class="sw" style="background:${HL[k]}"></i>${{y:'黄',p:'桃',b:'青',g:'緑'}[k]}</button>`).join('')}<span class="sep"></span><button class="btn sm${on(Ink.width==='thin')}" data-act="pw" data-w="thin">細</button><button class="btn sm${on(Ink.width==='thick')}" data-act="pw" data-w="thick">太</button><span class="sep"></span><button class="btn sm${on(Ink.tool==='eraser')}" data-act="er">消しゴム</button><button class="btn sm" data-act="iu">戻す</button><button class="btn sm dan" data-act="ic">全消去</button>`}
   else{p.hidden=true;p.innerHTML=''}
   Ink.mode=A.tool==='pen';
   $$('#studyCard canvas.ink').forEach(cv=>cv.classList.toggle('on',Ink.mode));
@@ -532,10 +534,14 @@ function updateToolUI(){
 }
 
 /* ---------- 手書き ---------- */
+const HL={y:'#ffd400',p:'#ff5c9d',b:'#3d9bff',g:'#4cc94c'};
+function toggleEraser(){if(Ink.tool==='eraser')Ink.tool=Ink.prev||'pen';else{Ink.prev=Ink.tool;Ink.tool='eraser'}updateToolUI();toast(Ink.tool==='eraser'?'消しゴム':(Ink.tool==='hl'?'マーカー':'ペン'),800)}
 function inkColor(k){return k==='r'?'#e5243b':k==='b'?'#2166e0':Ink.k}
 const pf=pr=>0.4+pr*1.2;
 function drawStroke(ctx,s,W,from){
-  const p=s.p,n=p.length/3;if(!n)return;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=ctx.fillStyle=inkColor(s.c);
+  const p=s.p,n=p.length/3;if(!n)return;
+  if(s.h){ctx.save();ctx.globalAlpha=.38;ctx.lineWidth=s.w*W;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=HL[s.c]||HL.y;ctx.beginPath();ctx.moveTo(p[0]*W,p[1]*W);if(n===1)ctx.lineTo(p[0]*W+.01,p[1]*W);for(let i=1;i<n;i++)ctx.lineTo(p[i*3]*W,p[i*3+1]*W);ctx.stroke();ctx.restore();return}
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=ctx.fillStyle=inkColor(s.c);
   if(n===1){ctx.beginPath();ctx.arc(p[0]*W,p[1]*W,Math.max(.6,s.w*W*pf(p[2])/2),0,Math.PI*2);ctx.fill();return}
   for(let i=Math.max(1,from||0);i<n;i++){const a=(i-1)*3,b=i*3;ctx.lineWidth=s.w*W*pf((p[a+2]+p[b+2])/2);ctx.beginPath();ctx.moveTo(p[a]*W,p[a+1]*W);ctx.lineTo(p[b]*W,p[b+1]*W);ctx.stroke()}
 }
@@ -553,22 +559,32 @@ function evPts(e){const l=e.getCoalescedEvents?e.getCoalescedEvents():null;retur
 function addPts(e){const cu=Ink.cur,cv=cu.cv,r=cv.getBoundingClientRect(),W=cv._w;for(const ev of evPts(e)){const pr=cu.pen?(ev.pressure||0.5):0.5;cu.s.p.push(Math.round((ev.clientX-r.left)/W*1e4)/1e4,Math.round((ev.clientY-r.top)/W*1e4)/1e4,Math.round(pr*100)/100)}}
 function inkDown(e){
   if(!Ink.mode)return;const cv=e.currentTarget;
-  if(A.set.pencil&&e.pointerType==='touch'){Ink.fs={id:e.pointerId,y:e.clientY,st:$('#cs').scrollTop};try{cv.setPointerCapture(e.pointerId)}catch(_){}return}
+  if(A.set.pencil&&e.pointerType==='touch'){
+    Ink.tp.set(e.pointerId,{x:e.clientX,y:e.clientY,t:Date.now()});try{cv.setPointerCapture(e.pointerId)}catch(_){}
+    if(Ink.tp.size===1)Ink.fs={id:e.pointerId,y:e.clientY,st:$('#cs').scrollTop};
+    else if(Ink.tp.size===2){const ts=[...Ink.tp.values()];Ink.fs=null;if(Math.abs(ts[0].t-ts[1].t)<300)Ink.tt={t:Date.now(),moved:false}}
+    return}
   if(Ink.cur)return;e.preventDefault();try{cv.setPointerCapture(e.pointerId)}catch(_){}
   const c=cv._card,side=cv._side;Ink.undo.push({c,side,prev:c.ink[side].slice()});if(Ink.undo.length>60)Ink.undo.shift();
-  if(Ink.tool==='eraser'){Ink.cur={id:e.pointerId,cv,erase:true,changed:false};eraseAt(cv,e);return}
-  const s={c:Ink.color,w:(Ink.width==='thick'?5:2)/cv._w,p:[]};c.ink[side].push(s);
+  if(Ink.tool==='eraser'||(e.pointerType==='pen'&&(e.buttons&32))){Ink.cur={id:e.pointerId,cv,erase:true,changed:false};eraseAt(cv,e);return}
+  const hl=Ink.tool==='hl';
+  const s=hl?{c:Ink.hc,h:1,w:(Ink.width==='thick'?26:16)/cv._w,p:[]}:{c:Ink.color,w:(Ink.width==='thick'?5:2)/cv._w,p:[]};c.ink[side].push(s);
   Ink.cur={id:e.pointerId,cv,s,pen:e.pointerType==='pen'};addPts(e);
-  const ctx=cv.getContext('2d');ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);drawStroke(ctx,s,cv._w,0);
+  if(hl)redraw(cv);else{const ctx=cv.getContext('2d');ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);drawStroke(ctx,s,cv._w,0)}
 }
 function inkMove(e){
-  if(Ink.fs&&e.pointerId===Ink.fs.id){$('#cs').scrollTop=Ink.fs.st-(e.clientY-Ink.fs.y);return}
+  const tp=Ink.tp.get(e.pointerId);
+  if(tp){if(Ink.tt&&Math.hypot(e.clientX-tp.x,e.clientY-tp.y)>12)Ink.tt.moved=true;
+    if(Ink.fs&&e.pointerId===Ink.fs.id)$('#cs').scrollTop=Ink.fs.st-(e.clientY-Ink.fs.y);return}
   const cu=Ink.cur;if(!cu||e.pointerId!==cu.id)return;e.preventDefault();
   if(cu.erase){eraseAt(cu.cv,e);return}
-  const n0=cu.s.p.length/3;addPts(e);const cv=cu.cv,ctx=cv.getContext('2d');ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);drawStroke(ctx,cu.s,cv._w,n0);
+  const n0=cu.s.p.length/3;addPts(e);const cv=cu.cv;
+  if(cu.s.h){redraw(cv);return}
+  const ctx=cv.getContext('2d');ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);drawStroke(ctx,cu.s,cv._w,n0);
 }
 function inkUp(e){
-  if(Ink.fs&&e.pointerId===Ink.fs.id){Ink.fs=null;return}
+  if(Ink.tp.has(e.pointerId)){Ink.tp.delete(e.pointerId);if(Ink.fs&&e.pointerId===Ink.fs.id)Ink.fs=null;
+    if(!Ink.tp.size&&Ink.tt){const t=Ink.tt;Ink.tt=null;if(!t.moved&&Date.now()-t.t<450)toggleEraser()}return}
   const cu=Ink.cur;if(!cu||e.pointerId!==cu.id)return;Ink.cur=null;
   if(cu.erase&&!cu.changed){Ink.undo.pop();return}
   queueInk(cu.cv._card);
@@ -776,7 +792,8 @@ VIEWS.settings=function(){
   <p><b>カード</b>：表＝関係図・典型例・キーワード、裏＝ニックネーム・条文番号／判例日時・暗記事項（裏は見出しなし）。「カード」→「＋ 新規カード」で作成。表計算ソフトからの「まとめて追加」もできます。</p>
   <p><b>隠す</b>：編集画面か学習画面で文字を選び「隠す」。学習中は灰色の帯になり、タップで表示（もう一度タップで隠れる）。「全表示」で全部表示。</p>
   <p><b>関係図</b>：編集画面の「✏️ 関係図を描く」で、ペン・矢印・文字を使って描けます。写真や文字だけでもOK。描いた図は ✎ で書き足せます。</p>
-  <p><b>マーカー</b>：文字を選んで黄・桃・青・緑。「線を消す」で取り消し。</p>
+  <p><b>マーカー（文字）</b>：学習画面の「マーカー・隠す」で色（または「隠す」）を選んでおくと、文字を長押し・なぞって選ぶだけで、すぐに色がつきます。もう一度押すと解除。</p>
+  <p><b>手書きのマーカー・消しゴム切替</b>：手書きのパネルで「マーカー 黄・桃・青・緑」を選ぶと半透明の太線で書けます。消しゴムとの切り替えは「消しゴム」ボタン、iPadで「Pencilだけで書く」をオンにしている場合は<b>指2本で画面をトン</b>、パソコンでは E キー。ペンの消しゴム側（Surfaceペンなど）でも消せます。</p>
   <p><b>手書き</b>：学習画面の「手書き」をオンにして、カードに直接書き込み。もう一度押すとオフ（文字の選択・スクロールに戻る）。</p>
   <p><b>評価</b>：○覚えた／△あいまい／✖だめ。△✖は周の最後にもう一度出ます。「取消」で直前の評価をやり直し。</p>
   <p><b>横に並べる</b>：学習画面の「⇆ 横に並べる」で、表と裏を左右に並べて表示（ボタンは左側に縦並び）。「⇅ 縦に並べる」で元に戻ります。iPadの横向きやパソコン向けです。</p>
@@ -899,11 +916,12 @@ const ACT={
   sReveal:()=>{const S=A.S;if(!S||S.done)return;S.reveal=!S.reveal;$$('#studyCard .cz').forEach(z=>z.classList.toggle('hid',!S.reveal))},
   sEdit:()=>{const c=curCard();if(c)openEditor(c.id)},
   again:b=>{const S=A.S;let ids=b.dataset.w?Object.keys(S.res).filter(id=>S.res[id]>1):S.all;ids=ids.filter(id=>A.byId.has(id));startSession(orderIds(ids))},
-  tool:b=>{const t=b.dataset.t;A.tool=A.tool===t?'':t;selCache=null;updateToolUI()},
-  mk:b=>applyMark(b.dataset.op),
+  tool:b=>{const t=b.dataset.t;A.tool=A.tool===t?'':t;A.mop='';selCache=null;updateToolUI()},
+  mk:b=>{const op=b.dataset.op;if(hasCardSel()){A.mop=op;applyMark(op);return}A.mop=A.mop===op?'':op;updateToolUI()},
+  hlc:b=>{Ink.tool='hl';Ink.hc=b.dataset.c;updateToolUI()},
   pc:b=>{Ink.tool='pen';Ink.color=b.dataset.c;updateToolUI()},
-  pw:b=>{Ink.width=b.dataset.w;Ink.tool='pen';updateToolUI()},
-  er:()=>{Ink.tool='eraser';updateToolUI()},
+  pw:b=>{Ink.width=b.dataset.w;if(Ink.tool==='eraser')Ink.tool=Ink.prev||'pen';updateToolUI()},
+  er:()=>toggleEraser(),
   iu:()=>inkUndo(),
   ic:()=>inkClear(),
   new:()=>openEditor(null),
@@ -963,8 +981,10 @@ document.addEventListener('pointerdown',e=>{if(e.target.closest&&e.target.closes
 document.addEventListener('selectionchange',()=>{
   const ae=document.activeElement;if(ae&&ae.tagName==='TEXTAREA')trackTA(ae);
   if(A.view!=='study')return;const s=getSelection();if(!s||!s.rangeCount||s.isCollapsed)return;
-  const r=s.getRangeAt(0),cb=$('#cardBox');if(cb&&cb.contains(r.commonAncestorContainer)){const x=rangeToFields(r,cb);if(x.length)selCache=x}
+  const r=s.getRangeAt(0),cb=$('#cardBox');if(cb&&cb.contains(r.commonAncestorContainer)){const x=rangeToFields(r,cb);if(x.length)selCache=x;
+    if(A.mop&&A.tool==='mark'){clearTimeout(autoT);autoT=setTimeout(autoApply,900)}}
 });
+['mouseup','touchend','touchcancel'].forEach(ev=>document.addEventListener(ev,e=>{if(A.mop&&A.tool==='mark'&&e.target.closest&&e.target.closest('#cardBox')){clearTimeout(autoT);autoT=setTimeout(autoApply,ev==='mouseup'?30:250)}}));
 ['select','keyup','pointerup','focusin'].forEach(ev=>document.addEventListener(ev,e=>trackTA(e.target),true));
 document.addEventListener('input',e=>{const t=e.target;
   if(t.closest&&t.closest('#edit')){if(t.tagName==='TEXTAREA')autoGrow(t);updatePreview();return}
@@ -992,6 +1012,7 @@ document.addEventListener('keydown',e=>{
   const done=()=>{e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur()};
   if(k==='Escape'){done();endStudy();return}
   if(k==='u'||k==='U'){done();undo();return}
+  if((k==='e'||k==='E')&&A.tool==='pen'){done();toggleEraser();return}
   if(k==='ArrowUp'){done();undo(true);return}
   if(k==='ArrowDown'&&!S.done){done();skip();return}
   if(S.done)return;
