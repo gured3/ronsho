@@ -52,7 +52,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .chip small{opacity:.7;margin-left:4px}
 .chip.on{background:var(--acc2);color:#fff;box-shadow:0 3px 0 var(--acc2-d)}
 .seg{display:flex;gap:4px;background:var(--chip);border-radius:999px;padding:4px;margin:6px 0 10px}
-.seg button{flex:1;min-height:44px;border:0;border-radius:999px;background:none;color:var(--fg);font-size:15px;font-weight:700;touch-action:manipulation;padding:0 4px}
+.seg button{flex:1;min-width:0;min-height:44px;border:0;border-radius:999px;background:none;color:var(--fg);font-size:15px;font-weight:700;touch-action:manipulation;padding:0 4px}
 .seg button.on{background:var(--acc);color:var(--acc-fg);box-shadow:0 3px 0 var(--acc-d)}
 .rowf{display:flex;align-items:center;gap:10px;margin:8px 0;font-weight:700}
 select{min-height:46px;border:2px solid var(--line);border-radius:14px;background:var(--card);padding:0 10px;font-size:16px;max-width:100%}
@@ -85,7 +85,7 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .brow>.fld{margin:0}
 .brow>.fb-title{flex:1 1 52%;min-width:130px}
 .brow>.fb-cite{flex:1 1 38%;min-width:120px;font-size:calc(var(--fs) * .74);line-height:1.55;padding:8px 12px}
-.brow>.fb-title{line-height:1.4}
+.brow>.fb-title{line-height:min(1.4,var(--lh))}
 .fb-ex{margin:12px 0 0}
 .fb-kw{margin-top:12px;background:var(--kwbg);border-left:5px solid var(--acc);border-radius:10px;padding:6px 14px;font-weight:700}
 .relbox+.fld{margin-top:12px}
@@ -118,6 +118,7 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .cz.hid{color:transparent;background:var(--cloze);border-radius:8px;border-bottom-color:transparent}
 .cz.hid .mk{background:none}
 .imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.side[data-side=back]>.imgs:first-child{margin:0 0 12px}
 .imgs img{max-width:100%;max-height:60vh;border-radius:14px;border:2px solid var(--line);cursor:zoom-in;background:#fff}
 canvas.ink{position:absolute;left:0;top:0;pointer-events:none}
 canvas.ink.on{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -207,7 +208,7 @@ table.st thead th{border-top:0;color:var(--sub);font-size:13px}
 <noscript>JavaScriptを有効にしてください。</noscript>
 <script>
 (()=>{'use strict';
-const VERSION='1.3';
+const VERSION='1.4';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -426,7 +427,7 @@ function cardHTML(c,o){
   const tf=A.set.titleFront,rv=o.reveal;
   const front=relHTML(c,rv)+(tf?fieldHTML(c,'title',rv,'fb-title'):'')+fieldHTML(c,'ex',rv,'fb-ex')+fieldHTML(c,'kw',rv,'fb-kw')+imgsHTML(c,'front');
   const tc=(tf?'':fieldHTML(c,'title',rv,'fb-title'))+fieldHTML(c,'cite',rv,'fb-cite');
-  const back=(tc?`<div class="brow">${tc}</div>`:'')+fieldHTML(c,'memo',rv,'fb-memo')+imgsHTML(c,'back');
+  const back=imgsHTML(c,'back')+(tc?`<div class="brow">${tc}</div>`:'')+fieldHTML(c,'memo',rv,'fb-memo');
   const cv=o.preview?'':'<canvas class="ink"></canvas>';
   return`<article class="card"${o.preview?'':' id="studyCard"'}><div class="side" data-side="front"><div class="deckline">${esc(c.deck)}${c.tags.length?'　'+c.tags.map(esc).join(' '):''}</div>${front||'<div class="sub">（表は空です）</div>'}${cv}</div>${o.flip?`<div class="side" data-side="back">${back||'<div class="sub">（裏は空です）</div>'}${cv}</div>`:(o.hz?'<div class="side ph">（答え）</div>':'')}</article>`;
 }
@@ -763,7 +764,7 @@ VIEWS.stats=function(){
 /* ---------- 設定 ---------- */
 VIEWS.settings=function(){
   const S=A.set,smp=A.cards.filter(c=>c.sample).length;
-  $('#view').innerHTML=`<section class="box"><h2>表示</h2><div class="sub">文字の大きさ</div>${seg('set','fs',[[16,'小'],[18,'中'],[20,'大'],[24,'特大']],S.fs)}<div class="sub">文字の間隔</div>${seg('set','ls',[[0,'標準'],[0.04,'やや広'],[0.08,'広い'],[0.14,'最大']],S.ls)}<div class="sub">行の間隔</div>${seg('set','lh',[[1.6,'狭い'],[1.9,'標準'],[2.2,'広い'],[2.6,'最大']],S.lh)}<div class="fld" style="background:var(--hl);border-radius:16px;padding:10px 14px;margin:6px 0">見本：真の権利者の<span class="cz">帰責性</span>と第三者の保護との調和</div><div class="sub">配色</div>${seg('set','theme',[['auto','自動'],['light','ライト'],['dark','ダーク']],S.theme)}
+  $('#view').innerHTML=`<section class="box"><h2>表示</h2><div class="sub">文字の大きさ</div>${seg('set','fs',[[16,'小'],[18,'中'],[20,'大'],[24,'特大'],[28,'超大'],[34,'最大']],S.fs)}<div class="sub">文字の間隔</div>${seg('set','ls',[[0,'標準'],[0.04,'やや広'],[0.08,'広い'],[0.14,'最大']],S.ls)}<div class="sub">行の間隔</div>${seg('set','lh',[[1.2,'最小'],[1.4,'狭い'],[1.6,'狭め'],[1.9,'標準'],[2.2,'広い'],[2.6,'最大']],S.lh)}<div class="fld" style="background:var(--hl);border-radius:16px;padding:10px 14px;margin:6px 0">見本：真の権利者の<span class="cz">帰責性</span>と第三者の保護との調和</div><div class="sub">配色</div>${seg('set','theme',[['auto','自動'],['light','ライト'],['dark','ダーク']],S.theme)}
   <label class="chk"><input type="checkbox" data-ch="titleFront"${S.titleFront?' checked':''}>ニックネームを表（問題側）に出す</label></section>
   <section class="box"><h2>手書き</h2><label class="chk"><input type="checkbox" data-ch="pencil"${S.pencil?' checked':''}>Apple Pencil・ペンだけで書く（指ではスクロール）</label><p class="sub">iPadでおすすめ。オフのときは指でも書けます。</p></section>
   <section class="box"><h2>バックアップ・他の端末へ移す</h2><p class="sub">データはこの端末のこのアプリの中だけに保存されます。ときどき書き出して、ファイル（iCloud Drive・OneDriveなど）に保存してください。他の端末では「読み込む」で同じカードを使えます。</p>
