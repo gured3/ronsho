@@ -1,5 +1,5 @@
 // 論証カード：オフライン用（保存済みファイルをすぐ表示し、通信できるときに裏で最新版へ更新）
-const CACHE='ronsho-cards-v2';
+const CACHE='ronsho-cards-v3';
 const FILES=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
