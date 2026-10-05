@@ -93,6 +93,17 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .navb:active{transform:translateY(2px);box-shadow:0 1px 0 var(--line)}
 .navb:disabled{opacity:.35}
 .abar .flipb{flex:1;width:auto}
+.smain{flex:1;display:flex;flex-direction:column;min-height:0}
+#study.hz .smain{flex-direction:row}
+#study.hz .abar{order:-1;flex-direction:column;width:92px;flex:none;border-top:0;border-right:2px solid var(--line);padding:10px 8px calc(env(safe-area-inset-bottom) + 10px)}
+#study.hz .abar .navb{flex:0 0 58px;width:100%}
+#study.hz .abar .rate{flex:0 1 130px;width:100%;min-height:64px}
+#study.hz .abar{justify-content:center}
+#study.hz .abar .flipb{flex:1 1 0;width:100%;min-height:0;padding:0;writing-mode:vertical-rl;letter-spacing:.3em}
+#study.hz .card{display:flex;max-width:none;align-items:stretch}
+#study.hz .side{flex:1 1 0;min-width:0}
+#study.hz .side+.side{border-top:0;border-left:3px dashed var(--line)}
+.side.ph{display:flex;align-items:center;justify-content:center;color:var(--sub);font-weight:700;background:var(--hl)}
 .fb-memo{background:var(--memobg);border:2px dashed var(--line);border-radius:18px;padding:10px 16px}
 .relbox{background:var(--relbg);border-radius:20px;padding:10px;margin-bottom:4px}
 .relbox img{display:block;max-width:100%;max-height:55vh;margin:0 auto 8px;border-radius:14px;background:#fff;cursor:zoom-in}
@@ -196,7 +207,7 @@ table.st thead th{border-top:0;color:var(--sub);font-size:13px}
 <noscript>JavaScriptを有効にしてください。</noscript>
 <script>
 (()=>{'use strict';
-const VERSION='1.2';
+const VERSION='1.3';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -401,10 +412,10 @@ function openStudy(){
   Ink.k=getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()||'#111';
   const st=$('#study');st.hidden=false;$('#app').hidden=true;
   st.innerHTML=`<div class="sbar"><button class="btn sm" data-act="sEnd">終了</button><div class="prog" id="prog"></div><button class="btn sm" data-act="sUndo" id="bUndo">取消</button><button class="btn sm" data-act="sReveal" id="bRev">全表示</button><button class="btn sm" data-act="sEdit" id="bEdit">編集</button></div>
-  <div class="tools keepsel" id="tools"><button class="btn sm" data-act="tool" data-t="mark" id="tMark">マーカー・隠す</button><button class="btn sm" data-act="tool" data-t="pen" id="tPen">手書き</button><span class="meta" id="meta"></span></div>
+  <div class="tools keepsel" id="tools"><button class="btn sm" data-act="tool" data-t="mark" id="tMark">マーカー・隠す</button><button class="btn sm" data-act="tool" data-t="pen" id="tPen">手書き</button><button class="btn sm" data-act="lay" id="tLay"></button><span class="meta" id="meta"></span></div>
   <div class="tpanel keepsel" id="tpanel" hidden></div>
-  <div class="cscroll" id="cs"><div id="cardBox"></div></div>
-  <div class="abar" id="abar"></div>`;
+  <div class="smain"><div class="cscroll" id="cs"><div id="cardBox"></div></div>
+  <div class="abar" id="abar"></div></div>`;
   renderStudyCard();
 }
 function disconnectROs(){A.ros.forEach(r=>r.disconnect());A.ros=[]}
@@ -417,7 +428,7 @@ function cardHTML(c,o){
   const tc=(tf?'':fieldHTML(c,'title',rv,'fb-title'))+fieldHTML(c,'cite',rv,'fb-cite');
   const back=(tc?`<div class="brow">${tc}</div>`:'')+fieldHTML(c,'memo',rv,'fb-memo')+imgsHTML(c,'back');
   const cv=o.preview?'':'<canvas class="ink"></canvas>';
-  return`<article class="card"${o.preview?'':' id="studyCard"'}><div class="side" data-side="front"><div class="deckline">${esc(c.deck)}${c.tags.length?'　'+c.tags.map(esc).join(' '):''}</div>${front||'<div class="sub">（表は空です）</div>'}${cv}</div>${o.flip?`<div class="side" data-side="back">${back||'<div class="sub">（裏は空です）</div>'}${cv}</div>`:''}</article>`;
+  return`<article class="card"${o.preview?'':' id="studyCard"'}><div class="side" data-side="front"><div class="deckline">${esc(c.deck)}${c.tags.length?'　'+c.tags.map(esc).join(' '):''}</div>${front||'<div class="sub">（表は空です）</div>'}${cv}</div>${o.flip?`<div class="side" data-side="back">${back||'<div class="sub">（裏は空です）</div>'}${cv}</div>`:(o.hz?'<div class="side ph">（答え）</div>':'')}</article>`;
 }
 function renderStudyCard(keepScroll){
   const S=A.S;if(!S)return;disconnectROs();
@@ -426,7 +437,8 @@ function renderStudyCard(keepScroll){
   $('#prog').innerHTML=`${S.idx+1} / ${S.ids.length}<small>${S.round===1?'1周目':S.round+'周目（△✖のくり返し）'}</small>`;
   $('#meta').textContent=c.st.n?`前回 ${MARK[c.st.last]||'－'}　正答 ${c.st.o}/${c.st.n}`:'初めて';
   $('#tools').hidden=false;['bRev','bEdit'].forEach(id=>{$('#'+id).disabled=false});
-  $('#cardBox').innerHTML=cardHTML(c,{flip:S.flip,reveal:S.reveal});
+  const hz=A.set.layout==='h';$('#study').classList.toggle('hz',hz);$('#tLay').textContent=hz?'⇅ 縦に並べる':'⇆ 横に並べる';
+  $('#cardBox').innerHTML=cardHTML(c,{flip:S.flip,reveal:S.reveal,hz});
   const canBack=A.undo.length>0;
   $('#abar').innerHTML=`<button class="navb" data-act="sPrev" aria-label="前のカード"${canBack?'':' disabled'}>↑</button>`+(S.flip?`<button class="rate r1" data-act="rate" data-r="1" aria-label="覚えた">◯</button><button class="rate r2" data-act="rate" data-r="2" aria-label="あいまい">△</button><button class="rate r3" data-act="rate" data-r="3" aria-label="だめ">✖</button>`:`<button class="btn pri big flipb" data-act="flip">答えを見る</button>`)+`<button class="navb" data-act="sSkip" aria-label="飛ばして次へ">↓</button>`;
   $('#bUndo').disabled=!A.undo.length;
@@ -438,14 +450,14 @@ function renderStudyCard(keepScroll){
 function renderSummary(){
   const S=A.S,f=S.first,tot=f[1]+f[2]+f[3],pct=tot?Math.round(f[1]/tot*100):0;
   const weak=Object.keys(S.res).filter(id=>S.res[id]>1&&A.byId.has(id));
-  A.tool='';Ink.mode=false;$('#tpanel').hidden=true;$('#tools').hidden=true;
+  A.tool='';Ink.mode=false;$('#tpanel').hidden=true;$('#tools').hidden=true;$('#study').classList.remove('hz');
   $('#prog').innerHTML='結果';$('#bUndo').disabled=!A.undo.length;$('#bRev').disabled=true;$('#bEdit').disabled=true;
   $('#cardBox').innerHTML=`<div class="card sum"><h2>おつかれさまでした</h2><div class="bigpct">${pct}<small>%</small></div><div class="sub">1周目の正答率（○の割合・${tot}枚）</div><div class="stline"><span class="c1">○ ${f[1]}</span><span class="c2">△ ${f[2]}</span><span class="c3">✖ ${f[3]}</span></div>${S.round>1?`<div class="sub">△✖のくり返し：${S.round-1}周</div>`:''}</div>`;
   $('#abar').innerHTML=`<div class="col">${weak.length?`<button class="btn pri big" data-act="again" data-w="1">1周目で△✖だった${weak.length}枚をもう一度</button>`:''}<button class="btn big" data-act="again">同じカードをもう一度</button><button class="btn big" data-act="sHome">ホームへ</button></div>`;
 }
 function flip(){
   const S=A.S;if(!S||S.done||S.flip)return;S.flip=true;renderStudyCard(true);
-  const b=$('#studyCard .side[data-side=back]'),cs=$('#cs');if(!b)return;
+  const b=$('#studyCard .side[data-side=back]'),cs=$('#cs');if(!b||A.set.layout==='h')return;
   const top=b.getBoundingClientRect().top-cs.getBoundingClientRect().top;
   if(top>cs.clientHeight*0.55)cs.scrollTop+=top-8;
 }
@@ -766,6 +778,7 @@ VIEWS.settings=function(){
   <p><b>マーカー</b>：文字を選んで黄・桃・青・緑。「線を消す」で取り消し。</p>
   <p><b>手書き</b>：学習画面の「手書き」をオンにして、カードに直接書き込み。もう一度押すとオフ（文字の選択・スクロールに戻る）。</p>
   <p><b>評価</b>：○覚えた／△あいまい／✖だめ。△✖は周の最後にもう一度出ます。「取消」で直前の評価をやり直し。</p>
+  <p><b>横に並べる</b>：学習画面の「⇆ 横に並べる」で、表と裏を左右に並べて表示（ボタンは左側に縦並び）。「⇅ 縦に並べる」で元に戻ります。iPadの横向きやパソコン向けです。</p>
   <p><b>↑・↓</b>：↑で前のカードに戻る（そのカードの評価は取り消され、もう一度評価できます）、↓で今のカードを評価せずに飛ばします。</p>
   <p><b>キーボード</b>：Space・Enter＝答えを見る、1・2・3＝○△✖、↑↓＝戻る・飛ばす、U＝取消、Esc＝終了。</p>
   <p><b>注意</b>：文字の大きさや画面の幅を変えると、手書きの位置が文字とずれることがあります。</p></div></section>
@@ -878,6 +891,7 @@ const ACT={
   rate:b=>rate(+b.dataset.r),
   sUndo:()=>undo(),
   sPrev:()=>undo(true),
+  lay:()=>{A.set.layout=A.set.layout==='h'?'v':'h';saveSet();renderStudyCard(true)},
   sSkip:()=>skip(),
   sEnd:()=>endStudy(),
   sHome:()=>endStudy(),
