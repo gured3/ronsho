@@ -1,13 +1,13 @@
 {
-  "name": "論証カード",
-  "short_name": "論証カード",
+  "name": "論PASS",
+  "short_name": "論PASS",
   "description": "論証・趣旨・規範を覚える単語帳",
   "lang": "ja",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f2f3f5",
-  "theme_color": "#1f3a5f",
+  "background_color": "#0d1e3a",
+  "theme_color": "#0d1e3a",
   "icons": [
     {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
     {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
