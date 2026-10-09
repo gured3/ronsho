@@ -112,7 +112,7 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .side.ph{display:flex;align-items:center;justify-content:center;color:var(--sub);font-weight:700;background:var(--hl)}
 .fb-memo{background:var(--memobg);border:2px dashed var(--line);border-radius:18px;padding:10px 16px}
 .relbox{background:var(--relbg);border-radius:20px;padding:10px;margin-bottom:4px}
-.relbox img{display:block;max-width:100%;max-height:55vh;margin:0 auto 8px;border-radius:14px;background:#fff;cursor:zoom-in}
+.relbox img{display:block;max-width:100%;max-height:var(--imgmax,55vh);margin:0 auto 8px;border-radius:14px;background:#fff;cursor:zoom-in}
 .relbox img:last-child{margin-bottom:0}
 .reltxt{padding:2px 8px;font-weight:700}
 .penmode .fld{-webkit-user-select:none;user-select:none}
@@ -124,7 +124,7 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .cz.hid .mk{background:none}
 .imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .side[data-side=back]>.imgs:first-child{margin:0 0 12px}
-.imgs img{max-width:100%;max-height:60vh;border-radius:14px;border:2px solid var(--line);cursor:zoom-in;background:#fff}
+.imgs img{max-width:100%;max-height:var(--imgmax,60vh);border-radius:14px;border:2px solid var(--line);cursor:zoom-in;background:#fff}
 canvas.ink{position:absolute;left:0;top:0;pointer-events:none}
 canvas.ink.on{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .abar{display:flex;gap:10px;padding:10px 12px calc(env(safe-area-inset-bottom) + 12px);background:var(--card);border-top:2px solid var(--line);-webkit-user-select:none;user-select:none}
@@ -213,7 +213,7 @@ table.st thead th{border-top:0;color:var(--sub);font-size:13px}
 <noscript>JavaScriptを有効にしてください。</noscript>
 <script>
 (()=>{'use strict';
-const VERSION='2.0';
+const VERSION='2.1';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -361,14 +361,14 @@ async function load(){
   const [cards,set,hist,seeded,lastBk,sess,home,lastDeck]=await Promise.all([DB.all('cards').catch(()=>[]),g('settings'),g('hist'),g('seeded'),g('lastBackup'),g('session'),g('home'),g('lastDeck')]);
   const [dels,sync,chg]=await Promise.all([g('dels'),g('sync'),g('chg')]);A.dels=dels||{};A.sync=Object.assign({repo:'',token:'',auto:true,last:0,err:'',pushed:0},sync||{});A.chg=chg||0;
   A.cards=(cards||[]).map(normCard).sort((a,b)=>a.c-b.c);
-  A.set=Object.assign({fs:20,ls:0,lh:1.9,theme:'auto',pencil:false,titleFront:false},set||{});
+  A.set=Object.assign({fs:20,ls:0,lh:1.9,theme:'auto',pencil:false,titleFront:false,imgsize:60},set||{});
   A.hist=hist||{};A.lastBackup=lastBk||0;A.saved=(sess&&sess.ids&&!sess.done)?sess:null;A.lastDeck=lastDeck||'';
   if(home)A.home=Object.assign(A.home,home);
   if(!seeded&&!A.cards.length){A.cards=samples();await DB.putMany('cards',A.cards).catch(()=>{});await DB.put('kv',true,'seeded').catch(()=>{})}
   if(MIG.size){const sm={};samples().forEach(x=>{sm[x.id]=x});const ch=A.cards.filter(c=>MIG.has(c.id));ch.forEach(c=>{if(c.sample&&sm[c.id])c.f=sm[c.id].f});await DB.putMany('cards',ch).catch(()=>{});MIG.clear()}
   reindex();applySettings();
 }
-function applySettings(){const r=document.documentElement;r.style.setProperty('--fs',A.set.fs+'px');r.style.setProperty('--ls',A.set.ls+'em');r.style.setProperty('--lh',A.set.lh);r.dataset.theme=A.set.theme}
+function applySettings(){const r=document.documentElement;r.style.setProperty('--fs',A.set.fs+'px');r.style.setProperty('--ls',A.set.ls+'em');r.style.setProperty('--lh',A.set.lh);r.style.setProperty('--imgmax',(A.set.imgsize||60)+'vh');r.dataset.theme=A.set.theme}
 
 /* ---------- 画面切替 ---------- */
 const VIEWS={};
@@ -425,6 +425,9 @@ function openStudy(){
   <div class="tpanel keepsel" id="tpanel" hidden></div>
   <div class="smain"><div class="cscroll" id="cs"><div id="cardBox"></div></div>
   <div class="abar" id="abar"></div></div>`;
+  $('#cs').addEventListener('pointerdown',swipeDown);
+  $('#cs').addEventListener('pointerup',swipeUp);
+  $('#cs').addEventListener('pointercancel',swipeCancel);
   renderStudyCard();
 }
 function disconnectROs(){A.ros.forEach(r=>r.disconnect());A.ros=[]}
@@ -465,10 +468,13 @@ function renderSummary(){
   $('#abar').innerHTML=`<div class="col">${weak.length?`<button class="btn pri big" data-act="again" data-w="1">1周目で△✖だった${weak.length}枚をもう一度</button>`:''}<button class="btn big" data-act="again">同じカードをもう一度</button><button class="btn big" data-act="sHome">ホームへ</button></div>`;
 }
 function flip(){
-  const S=A.S;if(!S||S.done||S.flip)return;S.flip=true;renderStudyCard(true);
+  const S=A.S;if(!S||S.done||S.flip)return;S.flip=true;saveSess();renderStudyCard(true);
   const b=$('#studyCard .side[data-side=back]'),cs=$('#cs');if(!b||A.set.layout==='h')return;
   const top=b.getBoundingClientRect().top-cs.getBoundingClientRect().top;
   if(top>cs.clientHeight*0.55)cs.scrollTop+=top-8;
+}
+function unflip(){
+  const S=A.S;if(!S||S.done||!S.flip)return;flushInk();S.flip=false;S.reveal=false;saveSess();renderStudyCard(true);
 }
 function rate(r){
   const S=A.S,c=curCard();if(!c||!S.flip)return;flushInk();
@@ -506,6 +512,27 @@ function endStudy(){
   A.S=null;disconnectROs();Ink.mode=false;A.tool='';$('#study').innerHTML='';go('home');
   if(syncReady()&&A.chg!==A.sync.pushed)setTimeout(()=>syncNow(false),300);
 }
+
+/* ---------- スワイプ操作（右＝進む／左＝戻る） ---------- */
+const Swipe={id:null,x:0,y:0,t:0,active:false};
+function swipeDown(e){
+  if(Ink.mode||A.tool==='mark')return;
+  if(!A.S||A.S.done)return;
+  Swipe.id=e.pointerId;Swipe.x=e.clientX;Swipe.y=e.clientY;Swipe.t=Date.now();Swipe.active=true;
+}
+function swipeCancel(){Swipe.active=false}
+function swipeUp(e){
+  if(!Swipe.active||e.pointerId!==Swipe.id)return;Swipe.active=false;
+  if(Ink.mode||A.tool==='mark')return;
+  const dx=e.clientX-Swipe.x,dy=e.clientY-Swipe.y,dt=Date.now()-Swipe.t;
+  if(dt>700)return;
+  if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.8){
+    const s=getSelection();if(s&&!s.isCollapsed&&String(s).length)return;
+    if(dx>0)goForward();else goBack();
+  }
+}
+function goForward(){const S=A.S;if(!S||S.done)return;if(!S.flip)flip();else skip()}
+function goBack(){const S=A.S;if(!S||S.done)return;if(S.flip)unflip();else undo()}
 
 /* ---------- マーカー・隠す（学習画面） ---------- */
 let selCache=null;
@@ -640,7 +667,7 @@ function openEditor(id,o){
   <div class="sidehd">裏（答え）</div>${tf?'':ta('title',1)}${ta('cite',2)}${ta('memo',8)}
   <div class="thumbs" id="th_back"></div><button class="btn sm" data-act="eImg" data-side="back">＋ 裏に画像</button>
   ${E.inkN?`<p class="sub" id="inkInfo">このカードには手書きが${E.inkN}本あります。本文を大きく変えると位置がずれます。<button class="btn sm dan" data-act="eClearInk">手書きを消す</button></p>`:''}
-  <details class="help"><summary>使い方・書式</summary>入力欄の文字を範囲選択して上のボタンを押すと、マーカーや「隠す」がつきます。手で書く場合は、隠す部分を <code>{{ }}</code> で、マーカーを <code>[[y|文字]]</code> で囲みます（y 黄・p 桃・b 青・g 緑）。画像は貼り付け（Ctrl+V）でも追加できます。</details>
+  <details class="help"><summary>使い方・書式</summary>入力欄の文字を範囲選択して上のボタンを押すと、マーカーや「隠す」がつきます。手で書く場合は、隠す部分を <code>{{ }}</code> で、マーカーを <code>[[y|文字]]</code> で囲みます（y 黄・p 桃・b 青・g 緑）。画像は貼り付け（Ctrl+V）でも追加できます。画像の上下左右が白い余白だけの場合は、追加時に自動で切り詰められます。</details>
   <div class="sidehd">プレビュー（灰色部分はタップで表示）</div><div id="e_prev" style="margin-top:8px"></div>
   <div class="ebtns"><button class="btn pri" data-act="eSaveNext">保存して次を作成</button>${E.isNew?'':`<button class="btn" data-act="eDup">複製</button><button class="btn dan" data-act="eDel">削除</button>`}</div>
   </div></div>`;
@@ -695,11 +722,41 @@ async function delCards(list){
   await DB.delMany('cards',[...ids]).catch(()=>{});await DB.delMany('imgs',imgs).catch(()=>{});imgs.forEach(id=>A.imgCache.delete(id));
 }
 async function eDel(){const E=A.E;const c=A.byId.get(E.id);if(!c)return;if(!confirm('このカードを削除しますか？（元に戻せません）'))return;await delCards([c]);toast('削除しました');closeEditor()}
+function isBlankPixel(r,g,b,a){if(a<10)return true;return r>248&&g>248&&b>248}
+function trimCanvas(src){
+  const w=src.width,h=src.height;if(!w||!h)return src;
+  const ctx=src.getContext('2d');let data;
+  try{data=ctx.getImageData(0,0,w,h).data}catch(e){return src}
+  const step=Math.max(1,Math.floor(Math.max(w,h)/1200));
+  const rowBlank=y=>{for(let x=0;x<w;x+=step){const i=(y*w+x)*4;if(!isBlankPixel(data[i],data[i+1],data[i+2],data[i+3]))return false}return true};
+  const colBlank=x=>{for(let y=0;y<h;y+=step){const i=(y*w+x)*4;if(!isBlankPixel(data[i],data[i+1],data[i+2],data[i+3]))return false}return true};
+  let top=0,bottom=h-1,left=0,right=w-1;
+  while(top<bottom&&rowBlank(top))top++;
+  while(bottom>top&&rowBlank(bottom))bottom--;
+  while(left<right&&colBlank(left))left++;
+  while(right>left&&colBlank(right))right--;
+  const nw=right-left+1,nh=bottom-top+1;
+  if(nw<=0||nh<=0)return src;
+  if(nw>=w*0.98&&nh>=h*0.98)return src;
+  if(nw<w*0.05||nh<h*0.05)return src;
+  const pad=4;
+  const L=Math.max(0,left-pad),T=Math.max(0,top-pad),R=Math.min(w-1,right+pad),B=Math.min(h-1,bottom+pad);
+  const cw=R-L+1,ch=B-T+1;
+  const out=document.createElement('canvas');out.width=cw;out.height=ch;
+  out.getContext('2d').drawImage(src,L,T,cw,ch,0,0,cw,ch);
+  return out;
+}
 async function fileToData(file){
-  if(file.type==='image/png'&&file.size<600*1024){const d=await readAs(file,'url');const im=await loadImg(d);if(Math.max(im.naturalWidth,im.naturalHeight)<=1600)return d}
   const url=URL.createObjectURL(file);
-  try{const im=await loadImg(url);const w=im.naturalWidth,h=im.naturalHeight,s=Math.min(1,1600/Math.max(w,h)),cw=Math.max(1,Math.round(w*s)),ch=Math.max(1,Math.round(h*s));
-    const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(im,0,0,cw,ch);return cv.toDataURL('image/jpeg',0.85)}
+  try{
+    const im=await loadImg(url);
+    const w=im.naturalWidth,h=im.naturalHeight,s=Math.min(1,1600/Math.max(w,h)),cw=Math.max(1,Math.round(w*s)),ch=Math.max(1,Math.round(h*s));
+    let cv=document.createElement('canvas');cv.width=cw;cv.height=ch;
+    const transparent=/^image\/(png|webp|gif)$/.test(file.type);
+    const x=cv.getContext('2d');if(!transparent){x.fillStyle='#fff';x.fillRect(0,0,cw,ch)}x.drawImage(im,0,0,cw,ch);
+    cv=trimCanvas(cv);
+    return transparent?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.85);
+  }
   finally{URL.revokeObjectURL(url)}
 }
 const loadImg=src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('画像を読み込めません'));i.src=src});
@@ -791,7 +848,7 @@ VIEWS.stats=function(){
 /* ---------- 設定 ---------- */
 VIEWS.settings=function(){
   const S=A.set,smp=A.cards.filter(c=>c.sample).length;
-  $('#view').innerHTML=`<section class="box"><h2>表示</h2><div class="sub">文字の大きさ</div>${seg('set','fs',[[16,'小'],[18,'中'],[20,'大'],[24,'特大'],[28,'超大'],[34,'最大']],S.fs)}<div class="sub">文字の間隔</div>${seg('set','ls',[[0,'標準'],[0.04,'やや広'],[0.08,'広い'],[0.14,'最大']],S.ls)}<div class="sub">行の間隔</div>${seg('set','lh',[[1.2,'最小'],[1.4,'狭い'],[1.6,'狭め'],[1.9,'標準'],[2.2,'広い'],[2.6,'最大']],S.lh)}<div class="fld" style="background:var(--hl);border-radius:16px;padding:10px 14px;margin:6px 0">見本：真の権利者の<span class="cz">帰責性</span>と第三者の保護との調和</div><div class="sub">配色</div>${seg('set','theme',[['auto','自動'],['light','ライト'],['dark','ダーク']],S.theme)}
+  $('#view').innerHTML=`<section class="box"><h2>表示</h2><div class="sub">文字の大きさ</div>${seg('set','fs',[[16,'小'],[18,'中'],[20,'大'],[24,'特大'],[28,'超大'],[34,'最大']],S.fs)}<div class="sub">文字の間隔</div>${seg('set','ls',[[0,'標準'],[0.04,'やや広'],[0.08,'広い'],[0.14,'最大']],S.ls)}<div class="sub">行の間隔</div>${seg('set','lh',[[1.2,'最小'],[1.4,'狭い'],[1.6,'狭め'],[1.9,'標準'],[2.2,'広い'],[2.6,'最大']],S.lh)}<div class="fld" style="background:var(--hl);border-radius:16px;padding:10px 14px;margin:6px 0">見本：真の権利者の<span class="cz">帰責性</span>と第三者の保護との調和</div><div class="sub">画像の大きさ</div>${seg('set','imgsize',[[36,'小'],[50,'中'],[60,'標準'],[75,'大'],[90,'最大']],S.imgsize)}<p class="sub">カードに貼った画像・関係図を、画面の高さに対してどこまで大きく表示するかです。</p><div class="sub">配色</div>${seg('set','theme',[['auto','自動'],['light','ライト'],['dark','ダーク']],S.theme)}
   <label class="chk"><input type="checkbox" data-ch="titleFront"${S.titleFront?' checked':''}>ニックネームを表（問題側）に出す</label></section>
   <section class="box"><h2>手書き</h2><label class="chk"><input type="checkbox" data-ch="pencil"${S.pencil?' checked':''}>Apple Pencil・ペンだけで書く（指ではスクロール）</label><p class="sub">iPadでおすすめ。オフのときは指でも書けます。</p></section>
   <section class="box"><h2>☁ クラウド同期（GitHub）</h2>
@@ -822,9 +879,12 @@ VIEWS.settings=function(){
   <p><b>手書き</b>：学習画面の「手書き」をオンにして、カードに直接書き込み。もう一度押すとオフ（文字の選択・スクロールに戻る）。</p>
   <p><b>評価</b>：○覚えた／△あいまい／✖だめ。△✖は周の最後にもう一度出ます。「取消」で直前の評価をやり直し。</p>
   <p><b>横に並べる</b>：学習画面の「⇆ 横に並べる」で、表と裏を左右に並べて表示（ボタンは左側に縦並び）。「⇅ 縦に並べる」で元に戻ります。iPadの横向きやパソコン向けです。</p>
-  <p><b>↑・↓</b>：↑で前のカードに戻る（そのカードの評価は取り消され、もう一度評価できます）、↓で今のカードを評価せずに飛ばします。</p>
+  <p><b>画像の大きさ</b>：「設定」→「表示」→「画像の大きさ」で、カードに貼った画像・関係図の表示サイズを調整できます。画像の上下左右が白い余白だけの場合は、追加するときに自動で切り詰められます。</p>
+  <p><b>Enter／右スワイプ</b>：表のときは裏をめくる、裏のときは評価せずに次のカードへ進みます（スキップ）。</p>
+  <p><b>Space／左スワイプ</b>：裏のときは表だけの表示に戻します（同じカード）。表のときは、ひとつ前のカードの裏を表示した状態に戻します（評価のやり直し）。</p>
+  <p><b>↑・↓</b>：↑で前のカードの表に戻る（そのカードの評価は取り消され、もう一度評価できます）、↓で今のカードを評価せずに飛ばします。</p>
   <p><b>クラウド同期</b>：「設定」→「クラウド同期」で設定すると、端末間でカード・学習記録・手書き・画像が同期されます。右上の ☁ を押すとすぐ同期します。</p>
-  <p><b>キーボード</b>：Space・Enter＝答えを見る、1・2・3＝○△✖、↑↓＝戻る・飛ばす、U＝取消、Esc＝終了。</p>
+  <p><b>キーボード</b>：Enter＝裏へ進む／評価せず次へ、Space＝表に戻す／前のカードの裏へ戻る、1・2・3＝○△✖、↑↓＝前の表へ戻る・飛ばす、U＝取消、Esc＝終了。</p>
   <p><b>注意</b>：文字の大きさや画面の幅を変えると、手書きの位置が文字とずれることがあります。</p></div></section>
   <p class="sub">論PASS ${VERSION}</p>`;
   storStatus();
@@ -1118,7 +1178,8 @@ document.addEventListener('keydown',e=>{
   if(k==='ArrowUp'){done();undo(true);return}
   if(k==='ArrowDown'&&!S.done){done();skip();return}
   if(S.done)return;
-  if(k===' '||k==='Enter'){done();if(!S.flip)flip();return}
+  if(k==='Enter'){done();goForward();return}
+  if(k===' '){done();goBack();return}
   if(S.flip&&(k==='1'||k==='2'||k==='3')){done();rate(+k)}
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)flushInk()});
