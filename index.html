@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja" data-theme="auto">
+<html lang="ja" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -72,6 +72,14 @@ select{min-height:46px;border:2px solid var(--line);border-radius:14px;backgroun
 .sbar{display:flex;align-items:center;gap:6px;padding:calc(env(safe-area-inset-top) + 8px) 8px 8px;background:var(--card);border-bottom:2px solid var(--line);-webkit-user-select:none;user-select:none}
 .prog{flex:1;text-align:center;font-weight:800;font-variant-numeric:tabular-nums;font-size:19px;line-height:1.2;color:var(--acc)}
 .prog small{display:block;font-size:12px;color:var(--sub);font-weight:700}
+/* 学習画面：上部のバーを1段に統合（幅が足りない端末では折り返す） */
+.sbar.sstudy{flex-wrap:wrap;row-gap:4px;column-gap:5px}
+.sbar.sstudy .btn.sm{min-height:42px;padding:0 10px;font-size:14px}
+.sbar.sstudy .prog{flex:1 1 96px;min-width:0;font-size:17px}
+.sbar.sstudy .prog small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tgrp{display:contents}
+.seg.wrap{flex-wrap:wrap;border-radius:24px}
+.seg.wrap button{flex:1 1 auto;padding:0 12px}
 .tools,.tpanel,.mtools{display:flex;gap:6px;padding:7px 8px;align-items:center;flex-wrap:wrap;background:var(--card);border-bottom:2px solid var(--line);-webkit-user-select:none;user-select:none}
 .meta{margin-left:auto;font-size:13px;color:var(--sub);font-weight:700}
 .hint{font-size:13px;color:var(--sub)}
@@ -215,7 +223,7 @@ table.st thead th{border-top:0;color:var(--sub);font-size:13px}
 <noscript>JavaScriptを有効にしてください。</noscript>
 <script>
 (()=>{'use strict';
-const VERSION='2.1';
+const VERSION='2.2';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -252,7 +260,7 @@ const DB={db:null,mem:null,
 
 /* ---------- 状態 ---------- */
 const A={cards:[],byId:new Map(),imgCache:new Map(),set:{},hist:{},
-  home:{decks:[],tags:[],mode:'all',order:'rand',limit:0,repeat:true},
+  home:{decks:[],tags:[],mode:'all',order:'rand',limit:0,rep:'ok'},
   list:{q:'',deck:'',tag:'',mark:'',sort:'u',shown:200},
   view:'home',S:null,saved:null,undo:[],tool:'',E:null,lastDeck:'',lastBackup:0,ros:[],listIds:[],impMode:'merge'};
 const Ink={tp:new Map(),tt:null,prev:'pen',hc:'y',mode:false,tool:'pen',color:'k',width:'thin',undo:[],cur:null,fs:null,k:'#111',pend:new Set(),t:0};
@@ -363,9 +371,12 @@ async function load(){
   const [cards,set,hist,seeded,lastBk,sess,home,lastDeck]=await Promise.all([DB.all('cards').catch(()=>[]),g('settings'),g('hist'),g('seeded'),g('lastBackup'),g('session'),g('home'),g('lastDeck')]);
   const [dels,sync,chg]=await Promise.all([g('dels'),g('sync'),g('chg')]);A.dels=dels||{};A.sync=Object.assign({repo:'',token:'',auto:true,last:0,err:'',pushed:0},sync||{});A.chg=chg||0;
   A.cards=(cards||[]).map(normCard).sort((a,b)=>a.c-b.c);
-  A.set=Object.assign({fs:20,ls:0,lh:1.9,theme:'auto',pencil:false,titleFront:false,imgsize:60},set||{});
+  A.set=Object.assign({fs:20,ls:0,lh:1.9,theme:'dark',pencil:false,titleFront:false,imgsize:60},set||{});
+  // 配色の既定をダークに変更：以前の既定（自動）のままだった端末は、一度だけダークに切り替える
+  if(!A.set.dk){if(A.set.theme==='auto')A.set.theme='dark';A.set.dk=1;DB.put('kv',A.set,'settings').catch(()=>{})}
   A.hist=hist||{};A.lastBackup=lastBk||0;A.saved=(sess&&sess.ids&&!sess.done)?sess:null;A.lastDeck=lastDeck||'';
   if(home)A.home=Object.assign(A.home,home);
+  if(!['off','ok','x'].includes(A.home.rep))A.home.rep=(home&&home.repeat===false)?'off':'ok';
   if(!seeded&&!A.cards.length){A.cards=samples();await DB.putMany('cards',A.cards).catch(()=>{});await DB.put('kv',true,'seeded').catch(()=>{})}
   if(MIG.size){const sm={};samples().forEach(x=>{sm[x.id]=x});const ch=A.cards.filter(c=>MIG.has(c.id));ch.forEach(c=>{if(c.sample&&sm[c.id])c.f=sm[c.id].f});await DB.putMany('cards',ch).catch(()=>{});MIG.clear()}
   reindex();applySettings();
@@ -382,11 +393,11 @@ function go(v){
   VIEWS[v]();$('#main').scrollTop=0;
 }
 const chip=(act,label,on,val)=>`<button class="chip${on?' on':''}" data-act="${act}"${val!=null?` data-v="${esc(val)}"`:''}>${label}</button>`;
-const seg=(scope,k,opts,cur)=>`<div class="seg">${opts.map(([v,l])=>`<button data-act="seg" data-s="${scope}" data-k="${k}" data-v="${v}" class="${String(cur)===String(v)?'on':''}">${l}</button>`).join('')}</div>`;
+const seg=(scope,k,opts,cur,cls)=>`<div class="seg${cls?' '+cls:''}">${opts.map(([v,l])=>`<button data-act="seg" data-s="${scope}" data-k="${k}" data-v="${v}" class="${String(cur)===String(v)?'on':''}">${l}</button>`).join('')}</div>`;
 function decksOf(cards){const m=new Map();for(const c of cards||A.cards)m.set(c.deck,(m.get(c.deck)||0)+1);return[...m].sort((a,b)=>a[0].localeCompare(b[0],'ja'))}
 function tagsOf(cards){const m=new Map();for(const c of cards)for(const t of c.tags)m.set(t,(m.get(t)||0)+1);return[...m].sort((a,b)=>a[0].localeCompare(b[0],'ja'))}
 function poolBase(){const H=A.home;return A.cards.filter(c=>(!H.decks.length||H.decks.includes(c.deck))&&(!H.tags.length||c.tags.some(t=>H.tags.includes(t))))}
-function modeFilter(cs,mode){return cs.filter(c=>mode==='all'||(mode==='weak'&&c.st.last>=2)||(mode==='new'&&!c.st.last)||(mode==='notok'&&c.st.last!==1))}
+function modeFilter(cs,mode){return cs.filter(c=>mode==='all'||(mode==='weak'&&c.st.last>=2)||(mode==='mid'&&c.st.last===2)||(mode==='ng'&&c.st.last===3)||(mode==='new'&&!c.st.last)||(mode==='notok'&&c.st.last!==1))}
 
 VIEWS.home=function(){
   const H=A.home,decks=decksOf();H.decks=H.decks.filter(d=>decks.some(x=>x[0]===d));
@@ -397,9 +408,10 @@ VIEWS.home=function(){
   if(!A.cards.length)h+=`<div class="box"><p>カードがありません。下の「カード」から追加してください。</p></div>`;
   h+=`<section class="box"><h2>科目</h2><div class="chips">${chip('deckAll','すべて',!H.decks.length)}${decks.map(([d,k])=>chip('deck',esc(d)+`<small>${k}</small>`,H.decks.includes(d),d)).join('')}</div>`;
   if(tags.length)h+=`<h2 class="mt">分野・タグ</h2><div class="chips">${chip('tagAll','すべて',!H.tags.length)}${tags.map(([t,k])=>chip('tag',esc(t)+`<small>${k}</small>`,H.tags.includes(t),t)).join('')}</div>`;
-  h+=`</section><section class="box"><h2>出題</h2>${seg('home','mode',[['all','すべて'],['weak','△✖のみ'],['new','未学習'],['notok','○以外']],H.mode)}${seg('home','order',[['rand','ランダム'],['seq','作成順']],H.order)}
+  h+=`</section><section class="box"><h2>出題</h2><div class="sub">対象のカード（直近の評価）</div>${seg('home','mode',[['all','すべて'],['weak','△✖'],['mid','△のみ'],['ng','✖のみ'],['new','未学習'],['notok','○以外']],H.mode,'wrap')}${seg('home','order',[['rand','ランダム'],['seq','作成順']],H.order)}
   <div class="rowf"><span>枚数</span><select data-ch="limit">${[0,10,20,30,50,100].map(v=>`<option value="${v}"${H.limit===v?' selected':''}>${v?v+'枚':'すべて'}</option>`).join('')}</select></div>
-  <label class="chk"><input type="checkbox" data-ch="repeat"${H.repeat?' checked':''}>△・✖のカードは○になるまで繰り返す</label></section>
+  <div class="sub">くり返し方</div>${seg('home','rep',[['off','くり返さない'],['ok','△✖がなくなるまで'],['x','✖がなくなるまで']],H.rep,'wrap')}
+  <p class="sub">${H.rep==='ok'?'△か✖をつけたカードは、すべて○になるまで何周でも出ます。':H.rep==='x'?'✖をつけたカードだけ、△か○になるまで何周でも出ます（△は繰り返しません）。':'1周で終わります。'}</p></section>
   <button class="btn pri big" data-act="start"${n?'':' disabled'}>学習開始（${n}枚）</button>`;
   if(A.saved){const S=A.saved;const left=S.ids.length-S.idx+S.next.length;h+=`<button class="btn big mt8" data-act="resume">前回の続き（残り${left}枚・${S.round}周目）</button>`}
   h+=`<section class="box mt12"><h2>選択中の状況（${base.length}枚）</h2><div class="stline"><span>未学習 <b>${cnt[0]}</b></span><span class="c1">○ <b>${cnt[1]}</b></span><span class="c2">△ <b>${cnt[2]}</b></span><span class="c3">✖ <b>${cnt[3]}</b></span></div><div class="sub">今日：${td[0]+td[1]+td[2]}枚（○${td[0]}・△${td[1]}・✖${td[2]}）</div></section>`;
@@ -411,7 +423,7 @@ VIEWS.home=function(){
 /* ---------- 学習 ---------- */
 function startSession(ids){
   if(!ids.length){toast('対象のカードがありません');return}
-  A.S={ids:ids.slice(),all:ids.slice(),idx:0,round:1,next:[],first:[0,0,0,0],res:{},repeat:!!A.home.repeat,order:A.home.order,flip:false,reveal:false,done:false};
+  A.S={ids:ids.slice(),all:ids.slice(),idx:0,round:1,next:[],first:[0,0,0,0],res:{},rep:A.home.rep,repeat:A.home.rep!=='off',order:A.home.order,flip:false,reveal:false,done:false};
   A.undo=[];Ink.undo=[];saveSess();openStudy();
 }
 function orderIds(ids){return A.home.order==='rand'?shuffle(ids.slice()):ids.slice().sort((a,b)=>(A.byId.get(a).c-A.byId.get(b).c))}
@@ -422,8 +434,7 @@ function openStudy(){
   A.view='study';A.tool='';Ink.mode=false;Ink.cur=null;Ink.fs=null;
   Ink.k=getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()||'#111';
   const st=$('#study');st.hidden=false;$('#app').hidden=true;
-  st.innerHTML=`<div class="sbar"><button class="btn sm" data-act="sEnd">終了</button><div class="prog" id="prog"></div><button class="btn sm" data-act="sUndo" id="bUndo">取消</button><button class="btn sm" data-act="sReveal" id="bRev">全表示</button><button class="btn sm" data-act="sEdit" id="bEdit">編集</button></div>
-  <div class="tools keepsel" id="tools"><button class="btn sm" data-act="tool" data-t="mark" id="tMark">マーカー・隠す</button><button class="btn sm" data-act="tool" data-t="pen" id="tPen">手書き</button><button class="btn sm" data-act="lay" id="tLay"></button><span class="meta" id="meta"></span></div>
+  st.innerHTML=`<div class="sbar sstudy"><button class="btn sm" data-act="sEnd">終了</button><span class="tgrp keepsel" id="tools"><button class="btn sm" data-act="tool" data-t="mark" id="tMark">マーカー</button><button class="btn sm" data-act="tool" data-t="pen" id="tPen">手書き</button><button class="btn sm" data-act="lay" id="tLay"></button></span><div class="prog" id="prog"></div><button class="btn sm" data-act="sUndo" id="bUndo">取消</button><button class="btn sm" data-act="sReveal" id="bRev">全表示</button><button class="btn sm" data-act="sEdit" id="bEdit">編集</button></div>
   <div class="tpanel keepsel" id="tpanel" hidden></div>
   <div class="smain"><div class="cscroll" id="cs"><div id="cardBox"></div></div>
   <div class="abar" id="abar"></div></div>`;
@@ -447,16 +458,17 @@ function cardHTML(c,o){
   const tc=(tf?'':fieldHTML(c,'title',rv,'fb-title'))+fieldHTML(c,'cite',rv,'fb-cite');
   const back=imgsHTML(c,'back')+(tc?`<div class="brow">${tc}</div>`:'')+fieldHTML(c,'memo',rv,'fb-memo');
   const cv=o.preview?'':'<canvas class="ink"></canvas>';
-  return`<article class="card"${o.preview?'':' id="studyCard"'}><div class="side" data-side="front"><div class="deckline">${esc(c.deck)}${c.tags.length?'　'+c.tags.map(esc).join(' '):''}</div>${front||'<div class="sub">（表は空です）</div>'}${cv}</div>${o.flip?`<div class="side" data-side="back">${back||'<div class="sub">（裏は空です）</div>'}${cv}</div>`:(o.hz?'<div class="side ph">（答え）</div>':'')}</article>`;
+  return`<article class="card"${o.preview?'':' id="studyCard"'}><div class="side" data-side="front">${front||'<div class="sub">（表は空です）</div>'}${cv}</div>${o.flip?`<div class="side" data-side="back">${back||'<div class="sub">（裏は空です）</div>'}${cv}</div>`:(o.hz?'<div class="side ph">（答え）</div>':'')}</article>`;
 }
 function renderStudyCard(keepScroll){
   const S=A.S;if(!S)return;disconnectROs();if(!keepScroll)pendBack=false;
   const c=fixCur();
   if(S.done){saveSess();renderSummary();return}
-  $('#prog').innerHTML=`${S.idx+1} / ${S.ids.length}<small>${S.round===1?'1周目':S.round+'周目（△✖のくり返し）'}</small>`;
-  $('#meta').textContent=c.st.n?`前回 ${MARK[c.st.last]||'－'}　正答 ${c.st.o}/${c.st.n}`:'初めて';
+  const repTxt=(S.rep||(S.repeat?'ok':'off'))==='x'?'✖のくり返し':'△✖のくり返し';
+  const metaTxt=c.st.n?`前回${MARK[c.st.last]||'－'} 正答${c.st.o}/${c.st.n}`:'初めて';
+  $('#prog').innerHTML=`${S.idx+1} / ${S.ids.length}<small>${S.round===1?'1周目':S.round+'周目（'+repTxt+'）'}・${metaTxt}</small>`;
   $('#tools').hidden=false;['bRev','bEdit'].forEach(id=>{$('#'+id).disabled=false});
-  const hz=A.set.layout==='h';$('#study').classList.toggle('hz',hz);$('#tLay').textContent=hz?'⇅ 縦に並べる':'⇆ 横に並べる';
+  const hz=A.set.layout==='h';$('#study').classList.toggle('hz',hz);$('#tLay').textContent=hz?'⇅縦':'⇆横';
   $('#cardBox').innerHTML=cardHTML(c,{flip:S.flip,reveal:S.reveal,hz})+(S.flip&&!hz?'<div id="bspace"></div>':'');
   const canBack=A.undo.length>0;
   $('#abar').innerHTML=`<button class="navb" data-act="sPrev" aria-label="前のカード"${canBack?'':' disabled'}>↑</button>`+(S.flip?`<button class="rate r1" data-act="rate" data-r="1" aria-label="覚えた">◯</button><button class="rate r2" data-act="rate" data-r="2" aria-label="あいまい">△</button><button class="rate r3" data-act="rate" data-r="3" aria-label="だめ">✖</button>`:`<button class="btn pri big flipb" data-act="flip">答えを見る</button>`)+`<button class="navb" data-act="sSkip" aria-label="飛ばして次へ">↓</button>`;
@@ -471,7 +483,7 @@ function renderSummary(){
   const weak=Object.keys(S.res).filter(id=>S.res[id]>1&&A.byId.has(id));
   A.tool='';Ink.mode=false;$('#tpanel').hidden=true;$('#tools').hidden=true;$('#study').classList.remove('hz');
   $('#prog').innerHTML='結果';$('#bUndo').disabled=!A.undo.length;$('#bRev').disabled=true;$('#bEdit').disabled=true;
-  $('#cardBox').innerHTML=`<div class="card sum"><h2>おつかれさまでした</h2><div class="bigpct">${pct}<small>%</small></div><div class="sub">1周目の正答率（○の割合・${tot}枚）</div><div class="stline"><span class="c1">○ ${f[1]}</span><span class="c2">△ ${f[2]}</span><span class="c3">✖ ${f[3]}</span></div>${S.round>1?`<div class="sub">△✖のくり返し：${S.round-1}周</div>`:''}</div>`;
+  $('#cardBox').innerHTML=`<div class="card sum"><h2>おつかれさまでした</h2><div class="bigpct">${pct}<small>%</small></div><div class="sub">1周目の正答率（○の割合・${tot}枚）</div><div class="stline"><span class="c1">○ ${f[1]}</span><span class="c2">△ ${f[2]}</span><span class="c3">✖ ${f[3]}</span></div>${S.round>1?`<div class="sub">${(S.rep||(S.repeat?'ok':'off'))==='x'?'✖':'△✖'}のくり返し：${S.round-1}周</div>`:''}</div>`;
   $('#abar').innerHTML=`<div class="col">${weak.length?`<button class="btn pri big" data-act="again" data-w="1">1周目で△✖だった${weak.length}枚をもう一度</button>`:''}<button class="btn big" data-act="again">同じカードをもう一度</button><button class="btn big" data-act="sHome">ホームへ</button></div>`;
 }
 /* 裏を表示したら、裏の先頭が画面の上に来るまで自動スクロール（画像の読み込みで位置がずれるので、読込完了時にも再調整） */
@@ -500,7 +512,8 @@ function rate(r){
     const d=A.hist[snap.day]||(A.hist[snap.day]=[0,0,0]);d[r-1]++;S.first[r]++;S.res[c.id]=r;
     saveCard(c);saveHist();
   }
-  if(r!==1&&S.repeat)S.next.push(c.id);
+  const rep=S.rep||(S.repeat?'ok':'off');  // 古い保存データ（repeatのみ）にも対応
+  if((rep==='ok'&&r!==1)||(rep==='x'&&r===3))S.next.push(c.id);
   S.idx++;S.flip=false;S.reveal=false;Ink.undo=[];
   if(S.idx>=S.ids.length)advanceRound();
   saveSess();renderStudyCard();
@@ -884,7 +897,7 @@ VIEWS.stats=function(){
 /* ---------- 設定 ---------- */
 VIEWS.settings=function(){
   const S=A.set,smp=A.cards.filter(c=>c.sample).length;
-  $('#view').innerHTML=`<section class="box"><h2>表示</h2><div class="sub">文字の大きさ</div>${seg('set','fs',[[16,'小'],[18,'中'],[20,'大'],[24,'特大'],[28,'超大'],[34,'最大']],S.fs)}<div class="sub">文字の間隔</div>${seg('set','ls',[[0,'標準'],[0.04,'やや広'],[0.08,'広い'],[0.14,'最大']],S.ls)}<div class="sub">行の間隔</div>${seg('set','lh',[[1.2,'最小'],[1.4,'狭い'],[1.6,'狭め'],[1.9,'標準'],[2.2,'広い'],[2.6,'最大']],S.lh)}<div class="fld" style="background:var(--hl);border-radius:16px;padding:10px 14px;margin:6px 0">見本：真の権利者の<span class="cz">帰責性</span>と第三者の保護との調和</div><div class="sub">画像の大きさ</div>${seg('set','imgsize',[[36,'小'],[50,'中'],[60,'標準'],[75,'大'],[90,'最大']],S.imgsize)}<p class="sub">カードに貼った画像・関係図を、画面の高さに対してどこまで大きく表示するかです。</p><div class="sub">配色</div>${seg('set','theme',[['auto','自動'],['light','ライト'],['dark','ダーク']],S.theme)}
+  $('#view').innerHTML=`<section class="box"><h2>表示</h2><div class="sub">文字の大きさ</div>${seg('set','fs',[[16,'小'],[18,'中'],[20,'大'],[24,'特大'],[28,'超大'],[34,'最大']],S.fs)}<div class="sub">文字の間隔</div>${seg('set','ls',[[0,'標準'],[0.04,'やや広'],[0.08,'広い'],[0.14,'最大']],S.ls)}<div class="sub">行の間隔</div>${seg('set','lh',[[1.2,'最小'],[1.4,'狭い'],[1.6,'狭め'],[1.9,'標準'],[2.2,'広い'],[2.6,'最大']],S.lh)}<div class="fld" style="background:var(--hl);border-radius:16px;padding:10px 14px;margin:6px 0">見本：真の権利者の<span class="cz">帰責性</span>と第三者の保護との調和</div><div class="sub">画像の大きさ</div>${seg('set','imgsize',[[36,'小'],[50,'中'],[60,'標準'],[75,'大'],[90,'最大']],S.imgsize)}<p class="sub">カードに貼った画像・関係図を、画面の高さに対してどこまで大きく表示するかです。</p><div class="sub">配色</div>${seg('set','theme',[['dark','ダーク'],['light','ライト'],['auto','自動']],S.theme)}
   <label class="chk"><input type="checkbox" data-ch="titleFront"${S.titleFront?' checked':''}>ニックネームを表（問題側）に出す</label></section>
   <section class="box"><h2>手書き</h2><label class="chk"><input type="checkbox" data-ch="pencil"${S.pencil?' checked':''}>Apple Pencil・ペンだけで書く（指ではスクロール）</label><p class="sub">iPadでおすすめ。オフのときは指でも書けます。</p></section>
   <section class="box"><h2>☁ クラウド同期（GitHub）</h2>
@@ -913,7 +926,9 @@ VIEWS.settings=function(){
   <p><b>マーカー（文字）</b>：学習画面の「マーカー・隠す」で色（または「隠す」）を選んでおくと、文字を長押し・なぞって選ぶだけで、すぐに色がつきます。もう一度押すと解除。</p>
   <p><b>手書きのマーカー・消しゴム切替</b>：手書きのパネルで「マーカー 黄・桃・青・緑」を選ぶと半透明の太線で書けます。消しゴムとの切り替えは「消しゴム」ボタン、iPadで「Pencilだけで書く」をオンにしている場合は<b>指2本で画面をトン</b>、パソコンでは E キー。ペンの消しゴム側（Surfaceペンなど）でも消せます。</p>
   <p><b>手書き</b>：学習画面の「手書き」をオンにして、カードに直接書き込み。もう一度押すとオフ（文字の選択・スクロールに戻る）。</p>
-  <p><b>評価</b>：○覚えた／△あいまい／✖だめ。△✖は周の最後にもう一度出ます。「取消」で直前の評価をやり直し。</p>
+  <p><b>評価</b>：○覚えた／△あいまい／✖だめ。「取消」で直前の評価をやり直し。</p>
+  <p><b>出題の対象</b>：ホームで「△のみ」「✖のみ」などを選べます（直近の評価で絞り込み）。</p>
+  <p><b>くり返し方</b>：「△✖がなくなるまで」＝△✖をつけたカードがすべて○になるまで周回。「✖がなくなるまで」＝✖だけを、△か○になるまで周回。「くり返さない」＝1周で終了。</p>
   <p><b>横に並べる</b>：学習画面の「⇆ 横に並べる」で、表と裏を左右に並べて表示（ボタンは左側に縦並び）。「⇅ 縦に並べる」で元に戻ります。iPadの横向きやパソコン向けです。</p>
   <p><b>画像の大きさ</b>：「設定」→「表示」→「画像の大きさ」で、カードに貼った画像・関係図の表示サイズを調整できます。画像の上下左右が白い余白だけの場合は、追加するときに自動で切り詰められます。</p>
   <p><b>Enter／右スワイプ／画面をタップ</b>：表のときは裏をめくる、裏のときは評価せずに次のカードへ進みます（スキップ）。文字の隠し（灰色）をタップしたときは、めくらずにその隠しだけ表示されます。</p>
@@ -1155,7 +1170,6 @@ const ACT={
 };
 const CH={
   limit:t=>{A.home.limit=+t.value;saveHome();VIEWS.home()},
-  repeat:t=>{A.home.repeat=t.checked;saveHome()},
   titleFront:t=>{A.set.titleFront=t.checked;saveSet()},
   pencil:t=>{A.set.pencil=t.checked;saveSet()},
   autosync:t=>{A.sync.auto=t.checked;saveSyncCfg()},
