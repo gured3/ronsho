@@ -959,14 +959,23 @@ async function exportData(){
 }
 function markBackup(){A.lastBackup=Date.now();DB.put('kv',A.lastBackup,'lastBackup').catch(()=>{});toast('書き出しました');if(A.view==='settings'||A.view==='home')VIEWS[A.view]()}
 async function importData(d,mode){
-  const inc=d.cards.map(normCard);let add=0,upd=0,same=0;const put=[];
+  // JSONにid・作成日時が無いカードは、ここで新しいID・日時を自動で振る（作成順は並びのとおり）
+  const t0=Date.now();const inc=d.cards.map((x,i)=>normCard(x&&x.c?x:Object.assign({},x,{c:t0+i})));let add=0,upd=0,same=0,rev=0;const put=[];
   if(mode==='replace'){const now=Date.now();A.cards.forEach(c=>{if(!inc.some(x=>x.id===c.id))A.dels[c.id]=now});saveDels();await DB.clear('cards');await DB.clear('imgs');A.cards=[];A.imgCache.clear();reindex();A.hist=d.hist||{}}
   else if(d.hist){for(const k in d.hist){const a=A.hist[k]||[0,0,0],b=d.hist[k]||[0,0,0];A.hist[k]=[0,1,2].map(i=>Math.max(a[i]||0,b[i]||0))}}
   const imgs=d.imgs||{};const ip=Object.keys(imgs).map(id=>({id,d:imgs[id]}));
-  for(const c of inc){const cur=A.byId.get(c.id);if(!cur){A.cards.push(c);A.byId.set(c.id,c);put.push(c);add++}else if((c.m||c.u)>(cur.m||cur.u)){Object.assign(cur,c);put.push(cur);upd++}else same++}
+  // 取り込むカードは「いま」の操作として扱う：過去の削除記録を解除し、更新日時を現在にする。
+  // （固定の古い更新日時のままだと、同期時に「削除済み」と判定されて数秒後に消えてしまう）
+  const now=Date.now();
+  const adopt=c=>{if(A.dels[c.id]){delete A.dels[c.id];rev++}c.m=now};
+  for(const c of inc){const cur=A.byId.get(c.id);
+    if(!cur){adopt(c);A.cards.push(c);A.byId.set(c.id,c);put.push(c);add++}
+    else if((c.m||c.u)>(cur.m||cur.u)){adopt(c);Object.assign(cur,c);put.push(cur);upd++}
+    else same++}
+  await saveDels();
   await DB.putMany('imgs',ip);await DB.putMany('cards',put);await DB.put('kv',A.hist,'hist');markChange();
   A.cards.sort((a,b)=>a.c-b.c);reindex();
-  toast(`読み込み完了：追加${add}枚・更新${upd}枚・変更なし${same}枚`,3500);go('settings');
+  toast(`読み込み完了：追加${add}枚・更新${upd}枚・変更なし${same}枚`+(rev?`（削除済みだった${rev}枚を復活）`:''),4000);go('settings');
 }
 
 /* ---------- 画像ビューア ---------- */
