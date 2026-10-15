@@ -73,6 +73,8 @@ button,select,input,textarea{font:inherit;color:inherit}
 .bm-row label span{overflow-wrap:anywhere}
 .bm-row input{width:22px;height:22px;flex:none;accent-color:var(--acc)}
 .bm-row small{color:var(--sub);white-space:nowrap}
+.bkp{margin-top:12px;padding:10px 12px;border:2px dashed var(--acc);border-radius:16px}
+.bk-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-weight:700}
 .seg{display:flex;gap:4px;background:var(--chip);border-radius:999px;padding:4px;margin:6px 0 10px}
 .seg button{flex:1;min-width:0;min-height:44px;border:0;border-radius:999px;background:none;color:var(--fg);font-size:15px;font-weight:700;touch-action:manipulation;padding:0 4px}
 .seg button.on{background:var(--acc);color:var(--acc-fg);box-shadow:0 3px 0 var(--acc-d)}
@@ -263,7 +265,7 @@ table.st thead th{border-top:0;color:var(--sub);font-size:13px}
 <noscript>JavaScriptを有効にしてください。</noscript>
 <script>
 (()=>{'use strict';
-const VERSION='2.3';
+const VERSION='2.4';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -325,7 +327,22 @@ const saveHist=()=>{markChange();return DB.put('kv',A.hist,'hist').catch(()=>{})
 function saveSess(){const S=A.S;if(!S)return;if(S.done){A.saved=null;DB.del('kv','session').catch(()=>{})}else{A.saved=S;DB.put('kv',S,'session').catch(()=>{})}}
 
 async function getImg(id){if(A.imgCache.has(id))return A.imgCache.get(id);let r=null;try{r=await DB.get('imgs',id)}catch(_){}const d=r&&r.d;if(d)cacheImg(id,d);return d}
-function cacheImg(id,d){A.imgCache.set(id,d);if(A.imgCache.size>80){const k=A.imgCache.keys().next().value;if(!(A.E&&A.E.newImgs.has(k)))A.imgCache.delete(k)}}
+function cacheImg(id,d){A.imgCache.set(id,d);let tot=0;for(const v of A.imgCache.values())tot+=v.length;
+  for(const k of [...A.imgCache.keys()]){if(A.imgCache.size<=80&&tot<=60*1048576)break;if(k===id||(A.E&&A.E.newImgs.has(k)))continue;tot-=A.imgCache.get(k).length;A.imgCache.delete(k)}}
+const mb=n=>(n/1048576).toFixed(1);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function usedImgIds(){const s=new Set();A.cards.forEach(c=>[...c.img.rel,...c.img.front,...c.img.back].forEach(id=>s.add(id)));return[...s]}
+/* 画像を軽くする：長辺1400px・JPEG(0.8)。小さい画像や、軽くならない画像はそのまま */
+async function shrinkData(d){
+  if(typeof d!=='string'||!d.startsWith('data:image/')||d.length<150*1024)return d;
+  let im;try{im=await loadImg(d)}catch(_){return d}
+  const w=im.naturalWidth,h=im.naturalHeight;if(!w||!h)return d;
+  const k=Math.min(1,1400/Math.max(w,h)),cw=Math.max(1,Math.round(w*k)),ch=Math.max(1,Math.round(h*k));
+  const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(im,0,0,cw,ch);
+  let out=d;try{out=cv.toDataURL('image/jpeg',0.8)}catch(_){}
+  cv.width=cv.height=0;
+  return out.length<d.length*0.9?out:d;
+}
 function fillImgs(root){$$('img[data-img]',root).forEach(async im=>{const d=await getImg(im.dataset.img);if(d){im.src=d;if(pendBack)im.addEventListener('load',scrollBack,{once:true})}else im.alt='（画像なし）'})}
 
 /* ---------- 書式：{{隠す}} と [[y|マーカー]] ---------- */
@@ -1052,10 +1069,10 @@ VIEWS.settings=function(){
   トークンには有効期限があります。期限が切れたら新しく作り直して、各端末で入れ直してください。トークンはこの端末の中にだけ保存されます。</details></section>
   <section class="box"><h2>バックアップ・他の端末へ移す</h2><p class="sub">データはこの端末のこのアプリの中だけに保存されます。ときどき書き出して、ファイル（iCloud Drive・OneDriveなど）に保存してください。他の端末では「読み込む」で同じカードを使えます。</p>
   <p class="sub">最後の書き出し：${A.lastBackup?new Date(A.lastBackup).toLocaleString('ja-JP'):'なし'}</p>
-  <div class="btnrow"><button class="btn pri" data-act="export">書き出す</button><button class="btn" data-act="imp" data-m="merge">読み込む（追加・更新）</button><button class="btn" data-act="imp" data-m="replace">読み込む（すべて置き換え）</button></div>
+  <div class="btnrow"><button class="btn pri" data-act="export">書き出す</button><button class="btn" data-act="imp" data-m="merge">読み込む（追加・更新）</button><button class="btn" data-act="imp" data-m="replace">読み込む（すべて置き換え）</button></div>${bkHTML()}
   <p class="sub">「追加・更新」は、同じカードがあれば新しく変更された方を残します。</p>
   <p class="sub">ファイルは<b>複数まとめて選べます</b>。読み込んだファイルごとに「バッチ」になり（ファイル名がバッチ名）、ホームで法律名・バッチごとに選んで学習できます。</p></section>
-  <section class="box"><h2>データの整理</h2><div class="btnrow"><button class="btn" data-act="resetStats">学習記録をリセット</button>${smp?`<button class="btn" data-act="delSamples">サンプル（${smp}枚）を削除</button>`:''}<button class="btn dan" data-act="delAll">すべてのカードを削除</button></div><p class="sub" id="stor"></p></section>
+  <section class="box"><h2>データの整理</h2><div class="btnrow"><button class="btn pri" data-act="slim">容量を減らす</button><button class="btn" data-act="resetStats">学習記録をリセット</button>${smp?`<button class="btn" data-act="delSamples">サンプル（${smp}枚）を削除</button>`:''}<button class="btn dan" data-act="delAll">すべてのカードを削除</button></div><p class="sub">「容量を減らす」＝保存している画像を軽くし（長辺1400px）、どのカードにも使われていない画像を削除します。使用量の表示に反映されるまで、しばらくかかることがあります。</p><p class="sub" id="stor"></p></section>
   <section class="box"><h2>使い方</h2><div class="help" style="margin:0">
   <p><b>カード</b>：表＝画像・関係図・典型例・キーワード（この順で表示）、裏＝ニックネーム・条文番号／判例日時・暗記事項（裏は見出しなし）。「カード」→「＋ 新規カード」で作成。表計算ソフトからの「まとめて追加」もできます。</p>
   <p><b>隠す</b>：編集画面か学習画面で文字を選び「隠す」。学習中は灰色の帯になり、タップで表示（もう一度タップで隠れる）。「全表示」で全部表示。</p>
@@ -1073,6 +1090,7 @@ VIEWS.settings=function(){
   <p><b>Enter／右スワイプ／画面をタップ</b>：表のときは裏をめくる、裏のときは評価せずに次のカードへ進みます（スキップ）。文字の隠し（灰色）をタップしたときは、めくらずにその隠しだけ表示されます。</p>
   <p><b>Space／左スワイプ</b>：裏のときは表だけの表示に戻します（同じカード）。表のときは、ひとつ前のカードの裏を表示した状態に戻します（評価のやり直し）。</p>
   <p><b>↑・↓</b>：↑で前のカードの表に戻る（そのカードの評価は取り消され、もう一度評価できます）、↓で今のカードを評価せずに飛ばします。</p>
+  <p><b>容量が大きいとき</b>：書き出しは自動で「カード本体」と「画像（約40MBずつ）」の複数ファイルに分かれます。読み込むときは全部まとめて選択。容量が気になったら「データの整理」→「容量を減らす」。読み込んだ画像は自動で軽くして保存します。</p>
   <p><b>クラウド同期</b>：「設定」→「クラウド同期」で設定すると、端末間でカード・学習記録・手書き・画像が同期されます。右上の ☁ を押すとすぐ同期します。</p>
   <p><b>キーボード</b>：Enter＝裏へ進む／評価せず次へ、Space＝表に戻す／前のカードの裏へ戻る、1・2・3＝○△✖、↑↓＝前の表へ戻る・飛ばす、U＝取消、Esc＝終了。</p>
   <p><b>注意</b>：文字の大きさや画面の幅を変えると、手書きの位置が文字とずれることがあります。</p></div></section>
@@ -1085,16 +1103,64 @@ async function storStatus(){
   else{try{if(navigator.storage&&navigator.storage.estimate){const e=await navigator.storage.estimate();s+=`使用量：約${(e.usage/1048576).toFixed(1)}MB。`}if(navigator.storage&&navigator.storage.persisted){s+=(await navigator.storage.persisted())?'保存は保護されています。':'空き容量が少ないとき、ブラウザが消す可能性があります（バックアップ推奨）。'}}catch(_){}}
   el.textContent=s;
 }
+/* ---------- 書き出し（バックアップ） ----------
+   全部を1つの文字列にすると、ブラウザの上限（約512MB：Invalid string length）を超える。
+   そこで「カード本体」と「画像（約40MBずつ）」のファイルに分け、中身も小分けの文字列のままファイルにする。 */
+const PART_MAX=40*1048576;
+async function imgData(id){if(A.imgCache.has(id))return A.imgCache.get(id);try{const r=await DB.get('imgs',id);return r&&r.d||null}catch(_){return null}}
 async function exportData(){
-  flushInk();const imgs={};
-  for(const c of A.cards)for(const id of[...c.img.rel,...c.img.front,...c.img.back]){const d=await getImg(id);if(d)imgs[id]=d}
-  const json=JSON.stringify({app:'ronsho-cards',v:1,backup:true,at:new Date().toISOString(),cards:A.cards,imgs,hist:A.hist});
-  const name=`ronpass-backup-${dayKey().replace(/-/g,'')}.json`;let file;
-  try{file=new File([json],name,{type:'application/json'})}catch(_){file=new Blob([json],{type:'application/json'})}
+  flushInk();toast('書き出しの準備中…',60000);
+  const chunks=[[]];let cur=0,total=0;
+  for(const id of usedImgIds()){const d=await imgData(id);const len=d?d.length:0;if(!len)continue;total+=len;
+    if(cur+len>PART_MAX&&chunks[chunks.length-1].length){chunks.push([]);cur=0}chunks[chunks.length-1].push(id);cur+=len}
+  if(!chunks[chunks.length-1].length)chunks.pop();
+  const stamp=dayKey().replace(/-/g,'');
+  if(total<=PART_MAX){ // 小さいときは今までどおり1ファイル
+    const f=await buildBackup({name:`ronpass-backup-${stamp}.json`,cards:true,ids:chunks[0]||[]},1,1);
+    await saveFile(f,true);return}
+  const files=[{cards:true,ids:[]}].concat(chunks.map(ids=>({cards:false,ids})));
+  files.forEach((f,i)=>{f.name=`ronpass-backup-${stamp}-${i+1}of${files.length}.json`});
+  A.bk={files,done:[],ready:null,total};
+  toast(`データが大きい（約${mb(total)}MB）ため、${files.length}個のファイルに分けて書き出します`,4000);
+  if(A.view==='settings')VIEWS.settings();else go('settings');
+  const el=$('#bkPanel');if(el)el.scrollIntoView({block:'center'});
+}
+async function buildBackup(f,no,cnt){
+  const pc=['{"app":"ronsho-cards","v":1,"backup":true,"part":'+no+',"parts":'+cnt+',"at":'+JSON.stringify(new Date().toISOString())+',"cards":',JSON.stringify(f.cards?A.cards:[]),',"hist":',JSON.stringify(f.cards?A.hist:{}),',"imgs":{'];
+  let first=true;
+  for(const id of f.ids){const d=await imgData(id);if(!d)continue;pc.push((first?'':',')+JSON.stringify(id)+':'+JSON.stringify(d));first=false}
+  pc.push('}}');
+  try{return new File(pc,f.name,{type:'application/json'})}catch(_){const b=new Blob(pc,{type:'application/json'});b.name=f.name;return b}
+}
+async function saveFile(file,mark){
   if(isIOS&&navigator.canShare&&file instanceof File&&navigator.canShare({files:[file]})){
-    try{await navigator.share({files:[file]});markBackup();return}catch(e){if(e&&e.name==='AbortError')return}}
-  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);markBackup();
+    try{await navigator.share({files:[file]});if(mark)markBackup();return true}catch(e){if(e&&e.name==='AbortError')return false}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);if(mark)markBackup();return true;
+}
+/* 分割ファイルを1つずつ作って保存（iPhoneは「作成」→「保存」の2段階：共有画面はボタン操作の直後でないと開けないため） */
+async function bkMake(i){const B=A.bk;if(!B)return;B.ready=null;toast(`${i+1}/${B.files.length} を作成中…`,60000);
+  const file=await buildBackup(B.files[i],i+1,B.files.length);
+  if(isIOS){B.ready={i,file};toast('できました。「保存」を押してください',2500);renderBk();return}
+  await saveFile(file,false);B.done[i]=true;toast(`${i+1}/${B.files.length} を書き出しました`,2000);bkCheckDone()}
+async function bkSave(){const B=A.bk;if(!B||!B.ready)return;const{i,file}=B.ready;if(await saveFile(file,false)){B.done[i]=true;B.ready=null}bkCheckDone()}
+function bkCheckDone(){const B=A.bk;if(B&&B.files.every((_,i)=>B.done[i])){A.bk=null;markBackup();return}renderBk()}
+function bkHTML(){const B=A.bk;if(!B)return'';
+  return`<div class="bkp" id="bkPanel"><p class="sub"><b>${B.files.length}個のファイル</b>に分けて書き出します（画像 合計 約${mb(B.total)}MB）。上から順に1つずつ保存してください。<br>読み込むときは「読み込む」で<b>全部のファイルをまとめて選択</b>します。</p>${B.files.map((f,i)=>{const lab=f.cards?'カード本体（文字・手書き・記録）':`画像 ${f.ids.length}枚`,rd=B.ready&&B.ready.i===i;
+    return`<div class="bk-row"><span>${i+1}/${B.files.length}　${lab}</span>${B.done[i]?'<b class="c1">✓ 保存済み</b>':rd?'<button class="btn sm pri" data-act="bkSave">保存</button>':`<button class="btn sm" data-act="bkMake" data-i="${i}">作成して保存</button>`}</div>`}).join('')}<div class="btnrow"><button class="btn sm dan" data-act="bkCancel">分割書き出しをやめる</button></div></div>`}
+function renderBk(){const el=$('#bkPanel');if(el)el.outerHTML=bkHTML();else if(A.view==='settings')VIEWS.settings()}
+/* 容量を減らす：画像を軽くし、どのカードにも使われていない画像を削除 */
+async function slimDown(){
+  if(!confirm('容量を減らします。\n・保存している画像を軽くする（長辺1400px・JPEG。見た目はほぼ同じ）\n・どのカードにも使われていない画像を削除\n枚数が多いと数分かかります。終わるまでアプリを閉じないでください。始めますか？'))return;
+  flushInk();const used=new Set(usedImgIds());
+  const keys=await DB.keys('imgs');let before=0,after=0,shr=0;const orph=[];
+  for(let i=0;i<keys.length;i++){const id=keys[i];if(!used.has(id)){orph.push(id);continue}
+    let r=null;try{r=await DB.get('imgs',id)}catch(_){}const d=r&&r.d;if(!d)continue;before+=d.length;
+    const sd=await shrinkData(d);after+=sd.length;if(sd!==d){try{await DB.put('imgs',{id,d:sd});A.imgCache.delete(id);shr++}catch(_){}}
+    if(i%5===0)toast(`容量を減らしています… ${i+1}/${keys.length}`,60000)}
+  if(orph.length){await DB.delMany('imgs',orph).catch(()=>{});orph.forEach(id=>A.imgCache.delete(id))}
+  toast(`完了：画像${shr}枚を軽量化（${mb(before)}MB → ${mb(after)}MB）・使われていない画像${orph.length}枚を削除`,8000);
+  if(A.view==='settings')VIEWS.settings();
 }
 function markBackup(){A.lastBackup=Date.now();DB.put('kv',A.lastBackup,'lastBackup').catch(()=>{});toast('書き出しました');if(A.view==='settings'||A.view==='home')VIEWS[A.view]()}
 /* 1ファイル分の取り込み。結果の枚数を返す（表示は呼び出し側でまとめて行う）。
@@ -1107,7 +1173,11 @@ async function importData(d,mode,fname){
   if(!isBackup&&bname)inc.forEach(c=>{if(!c.bt)c.bt=bname});
   if(mode==='replace'){const now=Date.now();A.cards.forEach(c=>{if(!inc.some(x=>x.id===c.id))A.dels[c.id]=now});saveDels();await DB.clear('cards');await DB.clear('imgs');A.cards=[];A.imgCache.clear();reindex();A.hist=d.hist||{}}
   else if(d.hist){for(const k in d.hist){const a=A.hist[k]||[0,0,0],b=d.hist[k]||[0,0,0];A.hist[k]=[0,1,2].map(i=>Math.max(a[i]||0,b[i]||0))}}
-  const imgs=d.imgs||{};const ip=Object.keys(imgs).map(id=>({id,d:imgs[id]}));
+  // 画像は1枚ずつ軽くしてから、少しずつ保存（大きいまま溜まると書き出し・同期の上限を超えるため）
+  const imgs=d.imgs||{},iids=Object.keys(imgs);
+  for(let i=0;i<iids.length;i+=20){const ip=[];
+    for(const id of iids.slice(i,i+20)){ip.push({id,d:await shrinkData(imgs[id])});imgs[id]=null;A.imgCache.delete(id)}
+    await DB.putMany('imgs',ip);if(iids.length>20)toast(`画像を取り込み中… ${Math.min(i+20,iids.length)}/${iids.length}`,60000)}
   // 取り込むカードは「いま」の操作として扱う：過去の削除記録を解除し、更新日時を現在にする。
   // （固定の古い更新日時のままだと、同期時に「削除済み」と判定されて数秒後に消えてしまう）
   const now=Date.now();
@@ -1117,7 +1187,7 @@ async function importData(d,mode,fname){
     else if((c.m||c.u)>(cur.m||cur.u)){adopt(c);Object.assign(cur,c);put.push(cur);upd++}
     else same++}
   await saveDels();
-  await DB.putMany('imgs',ip);await DB.putMany('cards',put);await DB.put('kv',A.hist,'hist');markChange();
+  await DB.putMany('cards',put);await DB.put('kv',A.hist,'hist');markChange();
   A.cards.sort((a,b)=>a.c-b.c);reindex();
   return{add,upd,same,rev};
 }
@@ -1193,7 +1263,7 @@ function syncReady(){return!!(A.sync&&A.sync.repo&&A.sync.token)}
 let syncT=0,syncing=false,syncAgain=false;
 function scheduleSync(ms){if(!syncReady()||!A.sync.auto)return;clearTimeout(syncT);syncT=setTimeout(()=>syncNow(false),ms||12000)}
 const hhmm=t=>{const d=new Date(t);return d.getHours()+':'+pad(d.getMinutes())};
-function syncInfoText(){if(!syncReady())return'未設定';const S=A.sync;return(S.last?`最終同期：${new Date(S.last).toLocaleString('ja-JP')}`:'まだ同期していません')+(S.err?`／前回のエラー：${esc(S.err)}`:'')+(A.chg!==S.pushed?'／未送信の変更あり':'')}
+function syncInfoText(){if(!syncReady())return'未設定';const S=A.sync;return(S.last?`最終同期：${new Date(S.last).toLocaleString('ja-JP')}`:'まだ同期していません')+(S.err?`／前回のエラー：${esc(S.err)}`:'')+(A.chg!==S.pushed?'／未送信の変更あり':'')+(S.pend?`／画像の送受信 残り${S.pend}枚（自動で続けます${S.imgStop?'。制限のため少し時間をおきます':''}）`:'')}
 function setSyncStat(st){const b=$('#syncB');if(!b)return;b.hidden=!syncReady();b.classList.toggle('err',st==='err');
   b.textContent=st==='busy'?'☁ 同期中…':st==='err'?'☁ ⚠ 同期失敗':st==='off'?'☁ オフライン':(A.sync.last?'☁ '+hhmm(A.sync.last):'☁ 同期');
   const i=$('#syncInfo');if(i)i.innerHTML=syncInfoText()}
@@ -1225,16 +1295,26 @@ async function doSync(retry){
   const chg0=A.chg;let res={ch:false,put:[],gone:[]};
   if(dsha){const txt=await gh(`${base}/contents/ronpass/data.json?ref=${encodeURIComponent(br)}`,{raw:true});res=mergeRemote(JSON.parse(txt))}
   if(res.ch){A.cards.sort((a,b)=>a.c-b.c);reindex();await DB.putMany('cards',res.put);if(res.gone.length)await DB.delMany('cards',res.gone.map(c=>c.id));await DB.put('kv',A.hist,'hist');await saveDels()}
-  const local=new Set(await DB.keys('imgs')),need=new Set();A.cards.forEach(c=>[...c.img.rel,...c.img.front,...c.img.back].forEach(id=>need.add(id)));
-  for(const id of need){const p=`ronpass/img/${id}.txt`;
-    if(!local.has(id)&&paths.has(p)){const d=await gh(`${base}/contents/${p}?ref=${encodeURIComponent(br)}`,{raw:true});await DB.put('imgs',{id,d:d.trim()});local.add(id)}
-    else if(local.has(id)&&!paths.has(p)){const d=await getImg(id);if(d)await gh(`${base}/contents/${p}`,{method:'PUT',body:{message:'image '+id,content:btoa(d),branch:br}})}}
+  // 1) カード本体（data.json）を先に送る：画像の送受信が途中で止まっても、カードの同期は完了させる
   if(!dsha||chg0!==A.sync.pushed){
     const data={app:'ronsho-cards',v:2,at:new Date().toISOString(),cards:A.cards,hist:A.hist,dels:A.dels};
     const body={message:'sync '+data.at,content:b64utf8(JSON.stringify(data)),branch:br};if(dsha)body.sha=dsha;
     try{await gh(`${base}/contents/ronpass/data.json`,{method:'PUT',body})}catch(e){if(!retry&&(e.status===409||e.status===422))return doSync(true);throw e}
     A.sync.pushed=chg0;
   }
+  // 2) 画像：GitHubの連続送信の制限に当たらないよう、1回の同期で扱う枚数に上限。残りは自動で次回に続ける
+  const local=new Set(await DB.keys('imgs')),ups=[],downs=[];
+  for(const id of usedImgIds()){const p=`ronpass/img/${id}.txt`;if(!local.has(id)&&paths.has(p))downs.push(id);else if(local.has(id)&&!paths.has(p))ups.push(id)}
+  let okD=0,okU=0;A.sync.imgStop=false;A.sync.imgErr='';
+  for(const id of downs.slice(0,150)){
+    try{const d=await gh(`${base}/contents/ronpass/img/${id}.txt?ref=${encodeURIComponent(br)}`,{raw:true});await DB.put('imgs',{id,d:d.trim()});okD++}
+    catch(e){A.sync.imgErr=syncErr(e);A.sync.imgStop=true;break}}
+  if(!A.sync.imgStop)for(const id of ups.slice(0,30)){
+    let d=null;try{const r=await DB.get('imgs',id);d=r&&r.d}catch(_){}if(!d)continue;
+    if(d.length>45*1048576)continue; // 極端に大きい画像は送らない（「容量を減らす」で軽くすれば送れる）
+    try{await gh(`${base}/contents/ronpass/img/${id}.txt`,{method:'PUT',body:{message:'image '+id,content:btoa(d),branch:br}});okU++;await sleep(600)}
+    catch(e){A.sync.imgErr=syncErr(e);A.sync.imgStop=true;break}}
+  A.sync.pend=(downs.length-okD)+(ups.length-okU);
   return res.ch;
 }
 async function syncNow(manual){
@@ -1244,7 +1324,8 @@ async function syncNow(manual){
   if(syncing){syncAgain=true;return}
   syncing=true;clearTimeout(syncT);setSyncStat('busy');
   try{const ch=await doSync(false);A.sync.last=Date.now();A.sync.err='';await saveSyncCfg();setSyncStat('ok');
-    if(ch&&A.view!=='study'&&!A.E)VIEWS[A.view]&&VIEWS[A.view]();if(manual)toast(ch?'同期しました（クラウドの変更を取り込みました）':'同期しました',2000)}
+    if(A.sync.pend)scheduleSync(A.sync.imgStop?10*60000:45000); // 画像の残りを自動で続ける（制限に当たったら10分おく）
+    if(ch&&A.view!=='study'&&!A.E)VIEWS[A.view]&&VIEWS[A.view]();if(manual)toast((ch?'同期しました（クラウドの変更を取り込みました）':'同期しました')+(A.sync.pend?`／画像は残り${A.sync.pend}枚を順に送受信します`:''),3500)}
   catch(e){A.sync.err=syncErr(e);await saveSyncCfg();setSyncStat('err');if(manual)toast('同期に失敗：'+A.sync.err,4000)}
   finally{syncing=false;if(syncAgain){syncAgain=false;scheduleSync(2000)}}
 }
@@ -1308,6 +1389,10 @@ const ACT={
   eImgDel:b=>{const E=A.E,s=b.dataset.side;E.img[s].splice(+b.dataset.i,1);renderThumbs(s);updatePreview()},
   eClearInk:()=>{if(confirm('このカードの手書きを消しますか？（保存すると確定）')){A.E.clearInk=true;const p=$('#inkInfo');if(p)p.textContent='手書きは保存時に消去されます。'}},
   export:()=>exportData().catch(e=>toast('書き出しに失敗しました：'+e.message,3000)),
+  bkMake:b=>bkMake(+b.dataset.i).catch(e=>toast('作成に失敗しました：'+e.message,3500)),
+  bkSave:()=>bkSave(),
+  bkCancel:()=>{A.bk=null;renderBk()},
+  slim:()=>slimDown().catch(e=>toast('失敗しました：'+e.message,3500)),
   imp:b=>{A.impMode=b.dataset.m;const f=$('#fileJson');f.value='';f.click()},
   resetStats:async()=>{if(!confirm('すべてのカードの学習記録（○△✖・正答率・日別記録）を消しますか？'))return;const now=Date.now();A.cards.forEach(c=>{c.st={n:0,o:0,t:0,x:0,last:0,at:0};c.m=now});A.hist={};await DB.putMany('cards',A.cards);await saveHist();A.saved=null;DB.del('kv','session').catch(()=>{});toast('リセットしました');VIEWS.settings()},
   delSamples:async()=>{if(!confirm('サンプルカードを削除しますか？'))return;await delCards(A.cards.filter(c=>c.sample));toast('削除しました');VIEWS.settings()},
